@@ -98,6 +98,8 @@ if __name__ == "__main__":
     if not os.path.exists(FIG_SAVE_DIR):
         os.mkdir(FIG_SAVE_DIR)
     
+    print('Saving plots to {}'.format(FIG_SAVE_DIR))
+
     ### GET FILE PATHS TO SYNC AND PKL FILES ###
     SYNC_FILE = paths['sync_file']
     # BEHAVIOR_PKL = paths['behavior_pkl']
