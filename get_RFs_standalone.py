@@ -44,7 +44,7 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, FI
          
             
             fig = plt.figure(constrained_layout=True, figsize=[6,6])
-            title = p + ' population RF cb'
+            title = p + ' population RF'
             fig.suptitle(title, color='w')
             
             nrows, ncols = 10,10
@@ -55,20 +55,20 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, FI
             ax3 = fig.add_subplot(gs[nrows-1, 0:ncols-1])
             
             ax1.imshow(np.mean(rmats_normed_mean, axis=2), origin='lower')
-            ax1.set_xticks([],[])
-            ax1.set_yticks([],[])
+            ax1.set_xticks([], minor=[])
+            ax1.set_yticks([], minor=[])
             
             ax3.imshow(np.vstack((np.arange(-45, 46), np.arange(-45, 46))), cmap='jet', clim=[-60, 60])
             ax3.set_xticks([0, 45, 90])
             ax3.set_xticklabels([-45, 0, 45])
-            ax3.set_yticks([],[])
+            ax3.set_yticks([], minor=[])
             ax3.set_xlabel('Azimuth')
             
             ax2.imshow(np.hstack((np.arange(-45, 46)[:,None], np.arange(-45, 46)[:,None])), cmap='jet_r', clim=[-60, 60])
             ax2.yaxis.tick_right()
             ax2.set_yticks([0, 45, 90])
             ax2.set_yticklabels([-45, 0, 45])
-            ax2.set_xticks([],[])
+            ax2.set_xticks([], minor=[])
             ax2.yaxis.set_label_position("right")
             ax2.set_ylabel('Elevation', rotation=270)
             
@@ -100,48 +100,52 @@ if __name__ == "__main__":
     
     ### GET FILE PATHS TO SYNC AND PKL FILES ###
     SYNC_FILE = paths['sync_file']
-    BEHAVIOR_PKL = paths['behavior_pkl']
-    REPLAY_PKL = paths['replay_pkl']
+    # BEHAVIOR_PKL = paths['behavior_pkl']
+    # REPLAY_PKL = paths['replay_pkl']
     MAPPING_PKL = paths['mapping_pkl']
-    syncDataset = sync_dataset(SYNC_FILE)
-    
-    print('Grabbing pkl data')
-    for f,s in zip([SYNC_FILE, BEHAVIOR_PKL, REPLAY_PKL, MAPPING_PKL], ['sync: ', 'behavior: ', 'replay: ', 'mapping: ']):
-        print(s)
-        print(f)
-    
-    behavior_data = pd.read_pickle(BEHAVIOR_PKL)
-    mapping_data = pd.read_pickle(MAPPING_PKL)
-    replay_data = pd.read_pickle(REPLAY_PKL)
+
+    try:
+        syncDataset = sync_dataset(SYNC_FILE)
+    except Exception as e:
+        logging.error('Error reading sync file: {}'.format(e))
+
+    try:
+        mapping_data = pd.read_pickle(MAPPING_PKL)
+    except Exception as e:
+        logging.error('Error reading mapping pkl file: {}'.format(e))
+
+    # replay_data = pd.read_pickle(REPLAY_PKL)
     
     
     ### PLOT FRAME INTERVALS ###
     vr, vf = probeSync.get_sync_line_data(syncDataset, channel=2)
     
-    behavior_frame_count = behavior_data['items']['behavior']['intervalsms'].size + 1
+    # behavior_frame_count = behavior_data['items']['behavior']['intervalsms'].size + 1
     mapping_frame_count = mapping_data['intervalsms'].size + 1
-    replay_frame_count = replay_data['intervalsms'].size + 1
+    # replay_frame_count = replay_data['intervalsms'].size + 1
     
     MONITOR_LAG = 0.036
     FRAME_APPEAR_TIMES = vf + MONITOR_LAG  
     
     ### CHECK THAT NO FRAMES WERE DROPPED FROM SYNC ###
-    total_pkl_frames = (behavior_frame_count +
-                        mapping_frame_count +
-                        replay_frame_count) 
-    print('frames in pkl files: {}'.format(total_pkl_frames))
-    print('frames in sync file: {}'.format(len(vf)))
-    
-    assert(total_pkl_frames==len(vf))
-    
-    ### CHECK THAT REPLAY AND BEHAVIOR HAVE SAME FRAME COUNT ###
-    print('frames in behavior stim: {}'.format(behavior_frame_count))
-    print('frames in replay stim: {}'.format(replay_frame_count))
+    # total_pkl_frames = (behavior_frame_count +
+    #                     mapping_frame_count +
+    #                     replay_frame_count) 
 
-    assert(behavior_frame_count==replay_frame_count)
+    # print('frames in pkl files: {}'.format(total_pkl_frames))
+    # print('frames in sync file: {}'.format(len(vf)))
     
-    probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
-    get_RFs(probe_dict, mapping_data, behavior_frame_count, FRAME_APPEAR_TIMES, FIG_SAVE_DIR)
+    #infer start frames for stimuli
+    start_frame = probeSync.get_frame_offsets(syncDataset, [mapping_frame_count])
+    
+    if start_frame is not None:
+        print('RF mapping started at frame {}, or experiment time {} seconds'.format(start_frame[0], start_frame[0]/60.))
+        
+        probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
+        get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR)
+
+    else:
+        logging.error('Could not find mapping stim start frame')
 
 
     

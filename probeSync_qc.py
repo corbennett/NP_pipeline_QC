@@ -238,6 +238,9 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
     # get vsyncs and stim_running signals from sync
     vf = get_vsyncs(sync_dataset)
     stimstarts, stimoffs = get_stim_starts_ends(sync_dataset)
+    print(stimstarts)
+    print(stimoffs)
+    print(len(vf))
     
     # get vsync frame lengths for all stimuli
     epoch_frame_counts = []
@@ -246,6 +249,8 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
         epoch_frames = np.where((vf>start)&(vf<end))[0]
         epoch_frame_counts.append(len(epoch_frames))
         epoch_start_frames.append(epoch_frames[0])
+    print(epoch_frame_counts)
+    print(frame_counts)
         
     if len(epoch_frame_counts)>len(frame_counts):
         logging.warning('Found extra stim presentations. Inferring start frames')
@@ -298,5 +303,13 @@ def get_stim_starts_ends(sync_dataset, fallback_line=5):
     
     stim_ons = sync_dataset.get_rising_edges(stim_line, units='seconds')
     stim_offs = sync_dataset.get_falling_edges(stim_line, units='seconds')
-    
+
+    if stim_offs[0]<stim_ons[0]:
+        logging.warning('Found extra stim off. Truncating.')
+        stim_offs = stim_offs[1:]
+
+    if len(stim_offs) != len(stim_ons):
+        logging.warning('Found {} stim starts, but {} stim offs. \
+            Sync signal is suspect...'.format(len(stim_ons), len(stim_offs)))
+
     return stim_ons, stim_offs
