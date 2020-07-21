@@ -15,7 +15,7 @@ import probeSync_qc as probeSync
 import data_getters
 import logging
 import sys
-sys.path.append("..")
+# sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
 
 
