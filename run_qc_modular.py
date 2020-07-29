@@ -8,7 +8,8 @@ Created on Fri Jul 10 15:42:31 2020
 import numpy as np
 import os, glob, shutil
 import behavior_analysis
-from visual_behavior.ophys.sync import sync_dataset
+#from visual_behavior.ophys.sync import sync_dataset
+from sync_dataset import Dataset as sync_dataset
 import pandas as pd
 from matplotlib import pyplot as plt
 import analysis
@@ -27,7 +28,7 @@ import logging
 identifier = r'\\10.128.50.43\sd6.3\1033616558_509940_20200701'
 identifier = r'\\10.128.50.43\sd6.3\1033388795_509652_20200630' 
 identifier = r"\\10.128.50.43\sd6.3\1033387557_509940_20200630"
-
+identifier = r"\\10.128.50.43\sd6.3\1037927382_513573_20200722"
 
 if identifier.find('_')>=0:
     d = data_getters.local_data_getter(base_dir=identifier)
@@ -51,7 +52,7 @@ for f,s in zip([SYNC_FILE, BEHAVIOR_PKL, REPLAY_PKL, MAPPING_PKL], ['sync: ', 'b
     
 
 ### GET MAIN DATA STREAMS ###
-syncDataset = sync_dataset.Dataset(SYNC_FILE)
+syncDataset = sync_dataset(SYNC_FILE)
 behavior_data = pd.read_pickle(BEHAVIOR_PKL)
 mapping_data = pd.read_pickle(MAPPING_PKL)
 replay_data = pd.read_pickle(REPLAY_PKL)
@@ -90,34 +91,12 @@ print('frames in replay stim: {}'.format(replay_frame_count))
 assert(behavior_frame_count==replay_frame_count)
 
 # look for potential frame offsets from aborted stims
-stimstarts, stimoffs = probeSync.get_sync_line_data(syncDataset, 'stim_running')
-if len(stimstarts)>3:
-    logging.warning('Found extra stim start. Inferring offset')
-    durations = np.array(stimoffs) - np.array(stimstarts)
-    
-    #find putative behavior session
-    behavior_start_ind = np.where((durations>3600)&(durations<3620))[0][0]  
-    behavior_start = stimstarts[behavior_start_ind]
-    behavior_start_frame = np.where(vf>behavior_start)[0][0]
-    logging.warning('Inferred behavior stim start: {}'.format(behavior_start))
-    
-    #find putative mapping session
-    mapping_start_ind = np.where((durations>1500)&(durations<1550))[0][0]  
-    mapping_start = stimstarts[mapping_start_ind]
-    mapping_start_frame = np.where(vf>mapping_start)[0][0]
-    logging.warning('Inferred mapping stim start: {}'.format(mapping_start))
+(behavior_start_frame, mapping_start_frame, replay_start_frame) = probeSync.get_frame_offsets(syncDataset, 
+                                                        [behavior_frame_count,
+                                                         mapping_frame_count,
+                                                         replay_frame_count])
 
-    #find putative replay session
-    replay_start_ind = np.where((durations>3600)&(durations<3620))[0][-1]  
-    replay_start = stimstarts[replay_start_ind]
-    replay_start_frame = np.where(vf>replay_start)[0][0]
-    logging.warning('Inferred replay stim start: {}'.format(replay_start))
-else:
-    behavior_start_frame = 0
-    mapping_start_frame = behavior_frame_count
-    replay_start_frame = behavior_frame_count + mapping_frame_count
-
-MONITOR_LAG = 0.036
+MONITOR_LAG = 0.036 #TO DO: don't hardcode this...
 FRAME_APPEAR_TIMES = vf + MONITOR_LAG  
 
 analysis.plot_frame_intervals(vf, behavior_frame_count, mapping_frame_count, 
