@@ -188,15 +188,6 @@ def generate_mapping_stim_table(pkl_data, sync_dataset, block_offset=1, frame_of
     stim_tabler = partial(build_stimuluswise_table, seconds_to_frames = seconds_to_frames)
     stim_table = create_stim_table(stim_file.stimuli, stim_tabler, make_spontaneous_activity_tables)
     
-#    stim_table = build_stimuluswise_table(stim_file.stimuli[1], seconds_to_frames)[0]
-#    
-#    offset = 0
-#    start_frames = []
-#    end_frames = []
-#    for stimulus in stimuli:
-#        start_frames.append(np.array([s[0] for s in stimulus['sweep_frames']]) + offset)
-#        end_frames.append(np.array([s[1] for s in stimulus['sweep_frames']]) + offset)
-#        offset = end_frames[-1][-1]
     
     frame_timestamps = get_vsyncs(sync_dataset)
     
