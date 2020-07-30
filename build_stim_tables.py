@@ -8,92 +8,124 @@ Created on Tue Jul 14 18:50:27 2020
 import pandas as pd
 from allensdk.brain_observatory.behavior.stimulus_processing import get_stimulus_presentations
 from allensdk.brain_observatory.sync_dataset import Dataset
-from allensdk.brain_observatory.ecephys.stimulus_table.ephys_pre_spikes import build_stimuluswise_table
+from allensdk.brain_observatory.ecephys.stimulus_table.ephys_pre_spikes import build_stimuluswise_table, create_stim_table, make_spontaneous_activity_tables
 from allensdk.brain_observatory.ecephys.file_io.stim_file import (
     CamStimOnePickleStimFile,
 )
+from functools import partial
 import numpy as np
 import logging
 
-def get_frame_offsets(sync_dataset, behavior_frame_count, mapping_frame_count):
-    # look for potential frame offsets from aborted stims
+def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
+    ''' Tries to infer which vsyncs correspond to the frames in the epochs in frame_counts
+        This allows you to align data even when there are aborted stimuli
+        
+        INPUTS:
+            sync_dataset: sync data from experiment (a 'Dataset' object made from the H5 file)
+            
+            frame_counts: list of the expected frame counts (taken from pkl files) for each
+                        of the stimuli in question;
+                        the list should be ordered by the display sequence
+            
+            tolerance: percent by which frame counts are allowed to deviate from expected
+                        
+        OUTPUTS:
+            start_frames: list of the inferred start frames for each of the stimuli
+    '''
+    
+    frame_counts = np.array(frame_counts)
+    tolerance = tolerance/100.
+    
+    # get vsyncs and stim_running signals from sync
     vf = get_vsyncs(sync_dataset)
     stimstarts, stimoffs = get_stim_starts_ends(sync_dataset)
     
-    if len(stimstarts)>3:
-        logging.warning('Found extra stim start. Inferring offset')
-        durations = np.array(stimoffs) - np.array(stimstarts)
+    # get vsync frame lengths for all stimuli
+    epoch_frame_counts = []
+    epoch_start_frames = []
+    for start, end in zip(stimstarts, stimoffs):
+        epoch_frames = np.where((vf>start)&(vf<end))[0]
+        epoch_frame_counts.append(len(epoch_frames))
+        epoch_start_frames.append(epoch_frames[0])
         
-        #find putative behavior session (first stim with ~3600 frames)
-        behavior_start_ind = np.where((durations>3600)&(durations<3620))[0][0]  
-        behavior_start = stimstarts[behavior_start_ind]
-        behavior_start_frame = np.where(vf>behavior_start)[0][0]
-        logging.warning('Inferred behavior stim start: {}'.format(behavior_start))
+    if len(epoch_frame_counts)>len(frame_counts):
+        logging.warning('Found extra stim presentations. Inferring start frames')
         
-        #find putative mapping session (first stim with ~1500 frames)
-        mapping_start_ind = np.where((durations>1500)&(durations<1550))[0][0]  
-        mapping_start = stimstarts[mapping_start_ind]
-        mapping_start_frame = np.where(vf>mapping_start)[0][0]
-        logging.warning('Inferred mapping stim start: {}'.format(mapping_start))
+        start_frames = []
+        for stim_num, fc in enumerate(frame_counts):
+            
+            print('finding stim start for stim {}'.format(stim_num))
+            best_match = np.argmin([np.abs(e-fc) for e in epoch_frame_counts])
+            if fc*(1-tolerance) <= epoch_frame_counts[best_match] <= fc*(1+tolerance):
+                _ = epoch_frame_counts.pop(best_match)
+                start_frame = epoch_start_frames.pop(best_match)
+                start_frames.append(start_frame)
+                print('found stim start at vsync {}'.format(start_frame))
+                
+            else:
+                logging.error('Could not find matching sync frames for stim {}'.format(stim_num))
+                return
     
-        #find putative replay session (last stim with ~3600 frames)
-        replay_start_ind = np.where((durations>3600)&(durations<3620))[0][-1]  
-        replay_start = stimstarts[replay_start_ind]
-        replay_start_frame = np.where(vf>replay_start)[0][0]
-        logging.warning('Inferred replay stim start: {}'.format(replay_start))
-    else:
-        behavior_start_frame = 0
-        mapping_start_frame = behavior_frame_count
-        replay_start_frame = behavior_frame_count + mapping_frame_count
+    else:        
+        start_frames = epoch_start_frames
     
-    return behavior_start_frame, mapping_start_frame, replay_start_frame
+    return start_frames
 
 
 
-def generate_behavior_stim_table(pkl_path, sync_path, frame_offset=0):
+def generate_behavior_stim_table(pkl_data, sync_dataset, frame_offset=0, block_offset=0):
     
-    p = pd.read_pickle(pkl_path)
+    p = pkl_data
     image_set =  p['items']['behavior']['params']['stimulus']['params']['image_set']
     image_set = image_set.split('/')[-1].split('.')[0]
     num_frames = p['items']['behavior']['intervalsms'].size + 1
     
-    sync_dataset = Dataset(sync_path)
     frame_timestamps = get_vsyncs(sync_dataset)
+    epoch_timestamps = frame_timestamps[frame_offset:frame_offset+num_frames]
     
-    stim_table = get_stimulus_presentations(p, frame_timestamps[frame_offset:frame_offset+num_frames])
-    stim_table['stimulus_block'] = 0
+    stim_table = get_stimulus_presentations(p, epoch_timestamps)
+    stim_table['stimulus_block'] = block_offset
     stim_table['stimulus_name'] = image_set
     stim_table = stim_table.rename(columns={'frame':'start_frame', 'start_time':'Start', 'stop_time':'End'})
-        
+    
+    # add columns for change and flashes since change
     change = np.zeros(len(stim_table))
     repeat_number = np.zeros(len(stim_table))
     current_image = stim_table.iloc[0]['stimulus_name']
     for index, row in stim_table.iterrows():
-        if row['image_name'] != current_image:
-            change[index] = 1
-            repeat_number[index] = 0
-            current_image = row['image_name']
+        if (row['image_name'] == 'omitted') or (row['omitted']) :
+            repeat_number[index] = repeat_number[index-1]
         else:
-            if row['omitted']:
-                repeat_number[index] = repeat_number[index-1]
+            if row['image_name'] != current_image:
+                change[index] = 1
+                repeat_number[index] = 0
+                current_image = row['image_name']
             else:
                 repeat_number[index] = repeat_number[index-1] + 1
-            
-    stim_table['change'] = change.astype(int)
-    stim_table.loc[0, 'change'] = 0
-    stim_table['flashes_since_change'] = repeat_number.astype(int)
     
-    stim_table[['change', 'flashes_since_change', 'image_name', 'omitted']].head(60)
+    #don't call first change a change
+    change[np.where(change)[0][0]] = 0
+    stim_table['change'] = change.astype(int)
+    
+    #stim_table.loc[0, 'change'] = 0 # MAKE BETTER SOMETIMES THIS IS THE SECOND ROW SINCE THE FIRST CAN BE OMITTED
+    stim_table['flashes_since_change'] = repeat_number.astype(int)
+    stim_table['active'] = True    
+    
+    # Fill in 'end frame' and 'End' for omitted stimuli
+    median_stim_frame_duration = np.nanmedian(stim_table['end_frame'] - stim_table['start_frame'])
+    stim_table.loc[stim_table['omitted'], 'end_frame'] = stim_table[stim_table['omitted']]['start_frame'] + median_stim_frame_duration
+    stim_table.loc[stim_table['omitted'], 'End'] = epoch_timestamps[stim_table[stim_table['omitted']]['end_frame'].astype(int)]    
+    stim_table['common_name'] = 'behavior'
     
     return stim_table
 
     
-def generate_replay_stim_table(pkl_path, sync_path, behavior_stim_table, stimulus_block=2, frame_offset=0):
+def generate_replay_stim_table(pkl_data, sync_dataset, behavior_stim_table, block_offset=3, frame_offset=0):
     
-    p = pd.read_pickle(pkl_path)
+    p = pkl_data
     num_frames = p['intervalsms'].size + 1
     
-    sync_dataset = Dataset(sync_path)
+    
     frame_timestamps = get_vsyncs(sync_dataset)
     frame_timestamps = frame_timestamps[frame_offset:frame_offset+num_frames]
     
@@ -118,28 +150,66 @@ def generate_replay_stim_table(pkl_path, sync_path, behavior_stim_table, stimulu
     putative_omitted = np.where(inter_flash_interval>70)[0]
     im_names_with_omitted = np.insert(im_names, putative_omitted+1, 'omitted')
     
+    ### Handle omitted flash edge cases ###
+    #check if the first flash was omitted
+    first_flash_omitted = behavior_stim_table['image_name'].iloc[0] == 'omitted'
+    if first_flash_omitted:
+        im_names_with_omitted = np.insert(im_names_with_omitted, 0, 'omitted')
+    
+    #check if last flash was omitted
+    last_flash_omitted = behavior_stim_table['image_name'].iloc[-1] == 'omitted'
+    if last_flash_omitted:
+        im_names_with_omitted = np.insert(im_names_with_omitted, len(im_names_with_omitted), 'omitted')
+    
+    # Verify that the image list for replay is identical to behavior
     assert all(behavior_stim_table['image_name'] == im_names_with_omitted)
     
     ## IF SO, JUST USE THE BEHAVIOR STIM TABLE, BUT ADJUST TIMES/FRAMES
     stim_table = behavior_stim_table.copy(deep=True)
-    stim_table['stimulus_block'] = stimulus_block
+    stim_table['stimulus_block'] = block_offset
     stim_table['Start'] = frame_timestamps[stim_table['start_frame']]
-    stim_table.loc[stim_table['omitted']==False, 'End'] = frame_timestamps[stim_table['end_frame'].dropna().astype(int)]
+    stim_table.loc[:, 'End'] = frame_timestamps[stim_table['end_frame'].dropna().astype(int)]
     stim_table['start_frame'] = stim_table['start_frame'] + frame_offset
-    stim_table.loc[stim_table['omitted']==False, 'end_frame'] = stim_table['end_frame'] + frame_offset
-    
+    stim_table.loc[:, 'end_frame'] = stim_table['end_frame'] + frame_offset
+    stim_table['active'] = False
+    stim_table['common_name'] = 'replay'
+
     return stim_table
 
-def generate_mapping_stim_table(pkl_path, sync_path, stimulus_block=1, frame_offset=0):
+def generate_mapping_stim_table(pkl_data, sync_dataset, block_offset=1, frame_offset=0):
     
-    stim_file = CamStimOnePickleStimFile.factory(pkl_path)
+    stim_file = pkl_data
     
     seconds_to_frames = (
         lambda seconds: (np.array(seconds) + stim_file.pre_blank_sec)
         * stim_file.frames_per_second
     )
     
-    stim_table = build_stimuluswise_table(stim_file.stimuli[0], seconds_to_frames)[0]
+    stim_tabler = partial(build_stimuluswise_table, seconds_to_frames = seconds_to_frames)
+    stim_table = create_stim_table(stim_file.stimuli, stim_tabler, make_spontaneous_activity_tables)
+    
+#    stim_table = build_stimuluswise_table(stim_file.stimuli[1], seconds_to_frames)[0]
+#    
+#    offset = 0
+#    start_frames = []
+#    end_frames = []
+#    for stimulus in stimuli:
+#        start_frames.append(np.array([s[0] for s in stimulus['sweep_frames']]) + offset)
+#        end_frames.append(np.array([s[1] for s in stimulus['sweep_frames']]) + offset)
+#        offset = end_frames[-1][-1]
+    
+    frame_timestamps = get_vsyncs(sync_dataset)
+    
+    stim_table = stim_table.rename(columns={'Start':'start_frame', 'End':'end_frame'})
+    stim_table['start_frame'] = np.array(stim_table['start_frame']).astype(int) + frame_offset
+    stim_table['end_frame'] = np.array(stim_table['end_frame']).astype(int) + frame_offset
+    stim_table['Start'] = frame_timestamps[stim_table['start_frame']]
+    stim_table['End'] = frame_timestamps[stim_table['end_frame']]
+    stim_table['stimulus_block'] = stim_table['stimulus_block'] + block_offset
+    stim_table['active'] = False
+    stim_table['common_name'] = 'mapping'
+
+    return stim_table
     
     
 def get_vsyncs(sync_dataset, fallback_line=2):
@@ -173,20 +243,78 @@ def get_stim_starts_ends(sync_dataset, fallback_line=5):
     return stim_ons, stim_offs
         
         
+def sort_columns(dataframe, ordered_cols):
+    '''Rearrage columns in dataframe.
+        INPUT:
+            dataframe: the dataframe you want to resort
+            ordered_cols: order of the columns you want.
+                You can specify a subset of the total columns here,
+                and the function will just tack on the rest ordered
+                alphanumerically
+    '''
+    all_cols = dataframe.columns.tolist()
+    
+    #if there are more columns than specified in
+    #ordered_cols, just tack them on alphabetically
+    if len(ordered_cols) < len(all_cols):
+        sorted_cols = [c for c in np.sort(all_cols) if c not in ordered_cols]
+        final_cols = ordered_cols + sorted_cols
+    else:
+        final_cols = ordered_cols
+    
+    return dataframe[final_cols]
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+def build_full_NP_behavior_stim_table(behavior_pkl_path, mapping_pkl_path, replay_pkl_path, sync_path):
+    
+    behavior_pkl = pd.read_pickle(behavior_pkl_path)
+    mapping_pkl = pd.read_pickle(mapping_pkl_path)
+    replay_pkl = pd.read_pickle(replay_pkl_path)
+    
+    frame_counts = []
+    for p in [behavior_pkl, mapping_pkl, replay_pkl]:
+        total_frames = len(p['intervalsms']) + 1 if 'intervalsms' in p \
+                else len(p['items']['behavior']['intervalsms']) + 1
+        frame_counts.append(total_frames)
+    
+    mapping_stim_file = CamStimOnePickleStimFile.factory(mapping_pkl_path)
+    
+    sync_dataset = Dataset(sync_path)
+    frame_offsets = get_frame_offsets(sync_dataset, frame_counts)        
+    
+    stim_table_behavior = generate_behavior_stim_table(behavior_pkl, sync_dataset, frame_offset=frame_offsets[0])
+    stim_table_mapping = generate_mapping_stim_table(mapping_stim_file, sync_dataset, frame_offset=frame_offsets[1])
+    stim_table_replay = generate_replay_stim_table(replay_pkl, sync_dataset, stim_table_behavior, frame_offset=frame_offsets[2])
+    
+    #Rearrange columns to make a bit more readable; the rest of the cols are just alphabetical
+    stim_table_behavior = sort_columns(stim_table_behavior, ['stimulus_block',
+                                                             'active',
+                                                             'stimulus_name',
+                                                             'Start',
+                                                             'End',
+                                                             'duration',
+                                                             'start_frame',
+                                                             'end_frame'])
+    
+    stim_table_full = pd.concat([stim_table_behavior, stim_table_mapping, stim_table_replay], sort=False)
+    stim_table_full.loc[:, 'duration'] = stim_table_full['End'] - stim_table_full['Start']
+    
+    
+    return stim_table_full
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
