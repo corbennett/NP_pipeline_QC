@@ -30,6 +30,7 @@ identifier = r'\\10.128.50.43\sd6.3\1033388795_509652_20200630'
 identifier = r"\\10.128.50.43\sd6.3\1033387557_509940_20200630"
 identifier = r"\\10.128.50.43\sd6.3\1037927382_513573_20200722"
 
+identifier = '1041287144'
 if identifier.find('_')>=0:
     d = data_getters.local_data_getter(base_dir=identifier)
 else:
@@ -106,6 +107,9 @@ analysis.plot_frame_intervals(vf, behavior_frame_count, mapping_frame_count,
 
 ### BUILD UNIT TABLE ####
 probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
+
+analysis.plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR)
+analysis.plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR)
 
 get_RFs(probe_dict, mapping_data, mapping_start_frame, FRAME_APPEAR_TIMES, FIG_SAVE_DIR)
 
