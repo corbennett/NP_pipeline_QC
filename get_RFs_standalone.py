@@ -15,11 +15,13 @@ import probeSync_qc as probeSync
 import data_getters
 import logging
 import sys
+from analysis import save_figure
 # sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
 
 
-def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, response_thresh=20): 
+def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
+            FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, response_thresh=20, prefix=''): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
     rfs = {p:{k:[] for k in ['peakChan', 'unitID', 'rfmat']} for p in probe_dict}
@@ -72,7 +74,8 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, FI
             ax2.yaxis.set_label_position("right")
             ax2.set_ylabel('Elevation', rotation=270)
             
-            fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png') )
+            #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
             
         
         except Exception as E:
@@ -95,6 +98,8 @@ if __name__ == "__main__":
     FIG_SAVE_DIR = os.path.join(r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC", 
                                 paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring'])
     
+    figure_prefix = paths['external_specimen_name'] + '_' + paths['datestring']
+
     if not os.path.exists(FIG_SAVE_DIR):
         os.mkdir(FIG_SAVE_DIR)
     
@@ -144,7 +149,7 @@ if __name__ == "__main__":
         print('RF mapping started at frame {}, or experiment time {} seconds'.format(start_frame[0], start_frame[0]/60.))
         
         probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
-        get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR)
+        get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, prefix=figure_prefix)
 
     else:
         logging.error('Could not find mapping stim start frame')

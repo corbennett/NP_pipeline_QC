@@ -15,7 +15,8 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None):
         all separated by underscores: e.g. '1028864423_366122_20200608'
         
     Applies up to three optional filters:
-        mouseID: take only sessions from this mouse
+        mouseID: take only sessions from this mouse,
+                if mouseID starts with '!' then exclude this mouse
         start_date: take all dates on or after this;
                     date format needs to be 'YYYYMMDD'
         end_date: take all dates before or on this
@@ -53,7 +54,10 @@ def mouseID_filter(d, mouseID):
     d_mouseID = re.search('_[0-9]{6}_', base).group(0)
     d_mouseID = d_mouseID[1:-1]
 
-    return str(d_mouseID) == str(mouseID)
+    if mouseID[0]=='!':
+        return str(d_mouseID) != str(mouseID[1:])
+    else:    
+        return str(d_mouseID) == str(mouseID)
     
     
 def start_date_filter(d, start_date):

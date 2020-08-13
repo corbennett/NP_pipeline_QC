@@ -113,7 +113,8 @@ def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, 
     return m, mtime, first_lick_times
 
 def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count, 
-                         behavior_start_frame, mapping_start_frame, replay_start_frame, save_dir):
+                         behavior_start_frame, mapping_start_frame, 
+                         replay_start_frame, save_dir, prefix=''):
     
     fig, ax = plt.subplots()
     fig.suptitle('stim frame intervals')
@@ -136,7 +137,8 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
             'rf', horizontalalignment='center')
     ax.text(replay_start_frame+behavior_frame_count/2, 0.15, 'replay', horizontalalignment='center')
     
-    fig.savefig(os.path.join(save_dir, 'stim_frame_intervals.png'))
+    save_figure(fig, os.path.join(save_dir, prefix+'stim_frame_intervals.png'))
+    #fig.savefig(os.path.join(save_dir, 'stim_frame_intervals.png'))
    
 #        lickTriggeredRunning = []
 #        rsamplesBefore = int(round(windowBefore * 60))
@@ -154,7 +156,8 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
 #        ax[1].set_xlim([0, r.shape[0]])
 #        ax[1].set_ylabel('run speed')
     
-def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66):
+def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, 
+                                    trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
     probe_color_dict = {'A': 'orange',
                         'B': 'r',
@@ -200,7 +203,8 @@ def plot_population_change_response(probe_dict, behavior_frame_count, mapping_fr
         ax.set_xticklabels(np.round(np.arange(-preTime, postTime, 0.05), decimals=2))
         ax.set_xlabel('Time from change (s)')
         ax.set_ylabel('Mean population response')
-        fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png'))
+        #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
         
         mean_active = np.mean(sdfs[0], axis=0)
         mean_active_baseline = mean_active[:int(preTime*1000)].mean()
@@ -213,11 +217,12 @@ def plot_population_change_response(probe_dict, behavior_frame_count, mapping_fr
     lax.set_xticklabels(np.arange(0, 0.1, 0.02))
     lax.set_xlabel('Time from change (s)')
     lax.set_ylabel('Normalized response')
-    lfig.savefig(os.path.join(FIG_SAVE_DIR, 'pop_change_response_latency_comparison.png'))
+    save_figure(lfig, os.path.join(FIG_SAVE_DIR, prefix+'pop_change_response_latency_comparison.png'))
+    #lfig.savefig(os.path.join(FIG_SAVE_DIR, 'pop_change_response_latency_comparison.png'))
     
     
     
-def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR):   
+def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, prefix=''):   
     
     ### Plot Running Wheel Data ###    
     rfig, rax = plt.subplots()
@@ -239,10 +244,11 @@ def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR):
     rax.set_xlabel('Time (s)')
     rax.set_ylabel('Run Speed (cm/s)')
     rax.legend(['behavior', 'rf map', 'passive'])
-    rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
+    save_figure(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.png'))
+    #rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
 
 
-def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR):
+def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
     
     fig, ax = plt.subplots()
     legend_artist = []
@@ -275,10 +281,11 @@ def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR):
     ax.set_xlabel('Probe')
     ax.set_ylabel('Unit count')
     
-    fig.savefig(os.path.join(FIG_SAVE_DIR, 'unit_quality_hist.png'))
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'unit_quality_hist.png'))
+    #fig.savefig(os.path.join(FIG_SAVE_DIR, 'unit_quality_hist.png'))
 
 
-def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR):
+def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR, prefix=''):
     
     for ip, probe in enumerate(probe_dict):
         p = probe_dict[probe]
@@ -297,7 +304,14 @@ def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR):
         
         ax.legend([goodhist[2][0], noisehist[2][0]], ['good', 'noise'])
         
-        fig.savefig(os.path.join(FIG_SAVE_DIR, 'Probe_{}_unit_distribution.png'.format(probe)))
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_unit_distribution.png'.format(probe)))
+        #fig.savefig(os.path.join(FIG_SAVE_DIR, 'Probe_{}_unit_distribution.png'.format(probe)))
     
     
-
+def save_figure(fig, save_path):
+    
+    save_dir = os.path.dirname(save_path)
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    
+    fig.savefig(save_path)
