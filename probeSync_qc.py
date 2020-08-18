@@ -17,20 +17,24 @@ import logging
 
 def getUnitData(probeBase,syncDataset):
 
-    probeTTLDir = os.path.join(probeBase, r'events\\Neuropix-PXI-100.0\\TTL_1')
     probeSpikeDir = os.path.join(probeBase, r'continuous\\Neuropix-PXI-100.0')
-        
     
-#    print(probeTTLDir)
-#    print(probeSpikeDir)
+    #Get barcodes/times from probe events and sync file
+    be_t, be = get_ephys_barcodes(probeBase)
+    bs_t, bs = get_sync_barcodes(syncDataset)
     
-    #Get barcodes from sync file
-#    if 'barcode' in syncDataset.line_labels:
-#        bRising, bFalling = get_sync_line_data(syncDataset, 'barcode')
-#    elif 'barcodes' in syncDataset.line_labels:
-#        bRising, bFalling = get_sync_line_data(syncDataset, 'barcodes')
-    bRising, bFalling = get_sync_line_data(syncDataset, channel=0)
-    bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
+    #Compute time shift between ephys and sync
+    shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
+    
+    #Get unit spike times 
+    units = load_spike_info(probeSpikeDir, p_sampleRate, shift)
+    
+    return units
+
+
+def get_ephys_barcodes(probeBase):
+
+    probeTTLDir = os.path.join(probeBase, r'events\\Neuropix-PXI-100.0\\TTL_1')
     
     channel_states = np.load(os.path.join(probeTTLDir, 'channel_states.npy'))
     event_times = np.load(os.path.join(probeTTLDir, 'event_timestamps.npy'))
@@ -38,16 +42,27 @@ def getUnitData(probeBase,syncDataset):
     beRising = event_times[channel_states>0]/30000.
     beFalling = event_times[channel_states<0]/30000.
     be_t, be = ecephys.extract_barcodes_from_times(beRising, beFalling)
+
+    return be_t, be
+
+
+def get_sync_barcodes(sync_dataset, fallback_line=0):
     
+    lines = sync_dataset.line_labels
     
-    #Compute time shift between ephys and sync
-    shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
+    #look for barcodes in labels
+    bline = fallback_line
+    for line in lines:
+        if 'barcode' in line:
+            bline = line
     
+    bRising = sync_dataset.get_rising_edges(bline, units='seconds')
+    bFalling = sync_dataset.get_falling_edges(bline, units='seconds')
     
-    #Get unit spike times 
-    units = load_spike_info(probeSpikeDir, p_sampleRate, shift)
+    bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
     
-    return units
+    return bs_t, bs
+    
 
 def build_unit_table(probes_to_run, paths, syncDataset):
     ### GET UNIT METRICS AND BUILD UNIT TABLE ###
@@ -313,3 +328,5 @@ def get_stim_starts_ends(sync_dataset, fallback_line=5):
             Sync signal is suspect...'.format(len(stim_ons), len(stim_offs)))
 
     return stim_ons, stim_offs
+
+

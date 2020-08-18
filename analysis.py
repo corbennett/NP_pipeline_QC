@@ -10,7 +10,10 @@ import os
 import analysis
 from numba import njit
 import visual_behavior
- 
+from get_sessions import glob_file
+import ecephys
+from probeSync_qc import get_sync_line_data
+
 
 def find_spikes_per_trial(spikes, trial_starts, trial_ends):
     tsinds = np.searchsorted(spikes, trial_starts)
@@ -306,6 +309,75 @@ def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR, prefix=''):
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_unit_distribution.png'.format(probe)))
         #fig.savefig(os.path.join(FIG_SAVE_DIR, 'Probe_{}_unit_distribution.png'.format(probe)))
+    
+  
+def plot_all_spike_hist(probe_dirs, FIG_SAVE_DIR, prefix=''):
+    
+    for ip, probe in enumerate(probe_dirs):
+        p_name = probe.split('_')[-2][-1]
+        base = os.path.join(os.path.join(probe, 'continuous'), 'Neuropix-PXI-100.0')
+        times_file = glob_file(base, 'spike_times.npy')
+        if times_file is not None:
+            times = np.load(times_file)
+            times = times/30000.
+            
+            fig, ax = plt.subplots()
+            bins = np.arange(0, times.max(), 1)
+            hist, b = np.histogram(times, bins=bins)
+            ax.plot(b[:-1], hist, 'k')
+            
+            fig.suptitle('Probe {} all spike time histogram'.format(p_name))
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_all_spike_time_hist.png'.format(p_name)))
+
+
+def plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
+    
+    for ip, probe in enumerate(probe_dirs):
+        p_name = probe.split('_')[-2][-1]        
+        base = os.path.join(probe, r'events\\Neuropix-PXI-100.0\\TTL_1')
+        
+        channel_states_file = glob_file(base, 'channel_states.npy')
+        event_times_file = glob_file(base, 'event_timestamps.npy')
+        
+        if channel_states_file and event_times_file:
+            
+            #get barcode intervals from probe events file                        
+            channel_states = np.load(channel_states_file)
+            event_times = np.load(event_times_file)
+            
+            beRising = event_times[channel_states>0]/30000.
+            beFalling = event_times[channel_states<0]/30000.
+            be_t, be = ecephys.extract_barcodes_from_times(beRising, beFalling)
+            
+            barcode_intervals = np.diff(be_t)
+            
+            #get intervals from sync file for comparison
+            bRising, bFalling = get_sync_line_data(syncDataset, channel=0)
+            bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
+            
+            sync_barcode_intervals = np.diff(bs_t)
+            
+            fig, ax = plt.subplots(1,2)
+            fig.set_size_inches([8, 4])
+            bins = np.arange(np.min([barcode_intervals.min(), sync_barcode_intervals.min()])-1, 
+                             np.max([barcode_intervals.max(), sync_barcode_intervals.max()])+1)
+
+            ax[0].hist(barcode_intervals, bins)
+            ax[1].hist(sync_barcode_intervals, bins)
+            ax[0].axhline(len(be_t)-1)
+            ax[1].axhline(len(bs_t)-1)
+            
+            ax[0].set_ylim([0.1, len(be_t)])
+            ax[1].set_ylim([0.1, len(bs_t)])
+            
+            [a.set_yscale('log') for a in ax]
+            
+            
+            ax[0].set_title('Probe {} ephys barcode intervals'.format(p_name))
+            ax[1].set_title('Probe {} sync barcode intervals'.format(p_name))
+            
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_barcode_interval_hist.png'.format(p_name)))
+
     
     
 def save_figure(fig, save_path):

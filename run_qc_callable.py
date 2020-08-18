@@ -34,7 +34,7 @@ def run_qc(exp_id, save_root):
     if not os.path.exists(FIG_SAVE_DIR):
         os.mkdir(FIG_SAVE_DIR)
     
-    figure_prefix = paths['external_specimen_name'] + '_' + paths['datestring']
+    figure_prefix = paths['external_specimen_name'] + '_' + paths['datestring'] + '_'
     
     ### GET FILE PATHS TO SYNC AND PKL FILES ###
     SYNC_FILE = paths['sync_file']
@@ -98,17 +98,21 @@ def run_qc(exp_id, save_root):
                                   behavior_start_frame, mapping_start_frame,
                                   replay_start_frame, FIG_SAVE_DIR, prefix=figure_prefix) 
     
+    probe_dirs = [paths['probe'+pid] for pid in paths['data_probes']]
     
     ### BUILD UNIT TABLE ####
     probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
     
+    ### Plot basic unit QC ###
     analysis.plot_unit_quality_hist(probe_dict, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
     analysis.plot_unit_distribution_along_probe(probe_dict, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
+    analysis.plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=figure_prefix)
+    analysis.plot_all_spike_hist(probe_dirs, FIG_SAVE_DIR, prefix=figure_prefix)
     
+    ### Plot visual responses
     get_RFs(probe_dict, mapping_data, mapping_start_frame, FRAME_APPEAR_TIMES, os.path.join(FIG_SAVE_DIR, 'receptive_fields'), prefix=figure_prefix)
-    
     analysis.plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, trials, 
                                              FRAME_APPEAR_TIMES, os.path.join(FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=66, prefix=figure_prefix)
     
-    
+    ### Plot running ###
     analysis.plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, prefix=figure_prefix)
