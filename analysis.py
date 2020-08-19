@@ -13,6 +13,8 @@ import visual_behavior
 from get_sessions import glob_file
 import ecephys
 from probeSync_qc import get_sync_line_data
+import probeSync_qc as probeSync
+import json
 
 
 def find_spikes_per_trial(spikes, trial_starts, trial_ends):
@@ -127,9 +129,7 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
                   replay_start_frame, replay_start_frame+behavior_frame_count]
     for v in vline_locs:
         ax.axvline(v, color='k', linestyle='--')
-#    ax.axvline(behavior_start_frame, color='k', linestyle='--')
-#    ax.axvline(mapping_start_frame, color='k', linestyle='--')
-#    ax.axvline(replay_start_frame, color='k', linestyle='--')
+
     
     ax.set_xlabel('frames')
     ax.set_ylabel('interval, s (capped at 0.2)')
@@ -141,23 +141,36 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
     ax.text(replay_start_frame+behavior_frame_count/2, 0.15, 'replay', horizontalalignment='center')
     
     save_figure(fig, os.path.join(save_dir, prefix+'stim_frame_intervals.png'))
-    #fig.savefig(os.path.join(save_dir, 'stim_frame_intervals.png'))
-   
-#        lickTriggeredRunning = []
-#        rsamplesBefore = int(round(windowBefore * 60))
-#        rsamplesAfter = int(round(windowAfter*60))
-#        for il, l in enumerate(first_lick_times):
-#            if l > runTime[0]:
-#                run_lick_ind = np.where(runTime<=l)[0][-1]
-#                lta = running[run_lick_ind-rsamplesBefore: run_lick_ind+rsamplesAfter]
-#                lickTriggeredRunning.append(lta)
-#                
-#        r = np.mean(lickTriggeredRunning, axis=0)
-#        
-#        ax[1].plot(r, 'k')
-#        ax[1].axvline(rsamplesBefore, c='k')
-#        ax[1].set_xlim([0, r.shape[0]])
-#        ax[1].set_ylabel('run speed')
+
+
+def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
+    
+    fig, ax = plt.subplots(constrained_layout=True)
+    fig.suptitle('Vsync interval histogram')
+    
+    bins = np.arange(0, 0.1, 0.002)*1000
+    ax.hist(np.diff(vf)*1000, bins=bins)
+    v = ax.axvline(16.667, color='k', linestyle='--')
+    ax.set_ylabel('number of frame intervals')
+    ax.set_xlabel('frame interval (ms)')
+    ax.legend([v], ['expected interval'])
+    
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
+
+
+def vsync_report(vf, FIG_SAVE_DIR, prefix=''):
+    
+    report = {}
+    intervals = np.diff(vf)
+    report['mean interval'] = intervals.mean()
+    report['median interval'] = np.median(intervals)
+    report['std of interval'] = intervals.std()
+    
+    report['num intervals 0.1 <= x < 1'] = int(np.sum((intervals<1)&(intervals>=0.1)))
+    report['num intervals >= 1 (expected = 2)'] = int(np.sum(intervals>=1))
+    
+    save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'vsync_report.json'))
+    
     
 def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, 
                                     trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
@@ -379,7 +392,36 @@ def plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix='')
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_barcode_interval_hist.png'.format(p_name)))
 
     
+def probe_sync_report(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
+ 
+    bs_t, bs = probeSync.get_sync_barcodes(syncDataset)
+ 
+    alignment_dict = {}    
+    for ip, probe in enumerate(probe_dirs):
+        
+        p_name = probe.split('_')[-2][-1]     
+        alignment_dict[p_name] = {}
+        
+        be_t, be = probeSync.get_ephys_barcodes(probe)
+        shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
+        
+        alignment_dict[p_name]['shift'] = np.float(shift)
+        alignment_dict[p_name]['sample_rate'] = np.float(p_sampleRate)
+
+    save_file = os.path.join(FIG_SAVE_DIR, prefix+'probe_sync_registration.json')
+    save_json(alignment_dict, save_file)
+
+
+def save_json(to_save, save_path):
     
+    save_dir = os.path.dirname(save_path)
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+        
+    with open(save_path, 'w') as f:
+        json.dump(to_save, f, indent=2)
+
+
 def save_figure(fig, save_path):
     
     save_dir = os.path.dirname(save_path)

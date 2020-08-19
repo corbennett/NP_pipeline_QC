@@ -94,20 +94,28 @@ def run_qc(exp_id, save_root):
     MONITOR_LAG = 0.036 #TO DO: don't hardcode this...
     FRAME_APPEAR_TIMES = vf + MONITOR_LAG  
     
+    ### Plot vsync info ###
+    vsync_save_dir = os.path.join(FIG_SAVE_DIR, 'vsyncs')
     analysis.plot_frame_intervals(vf, behavior_frame_count, mapping_frame_count, 
                                   behavior_start_frame, mapping_start_frame,
-                                  replay_start_frame, FIG_SAVE_DIR, prefix=figure_prefix) 
+                                  replay_start_frame, vsync_save_dir, prefix=figure_prefix) 
     
-    probe_dirs = [paths['probe'+pid] for pid in paths['data_probes']]
+    analysis.plot_vsync_interval_histogram(vf, vsync_save_dir)
+    analysis.vsync_report(vf, vsync_save_dir)
+    
     
     ### BUILD UNIT TABLE ####
     probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
     
     ### Plot basic unit QC ###
+    probe_dirs = [paths['probe'+pid] for pid in paths['data_probes']]
     analysis.plot_unit_quality_hist(probe_dict, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
     analysis.plot_unit_distribution_along_probe(probe_dict, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
-    analysis.plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=figure_prefix)
     analysis.plot_all_spike_hist(probe_dirs, FIG_SAVE_DIR, prefix=figure_prefix)
+    
+    ### Probe/Sync alignment
+    analysis.plot_barcode_interval_hist(probe_dirs, syncDataset, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
+    analysis.probe_sync_report(probe_dirs, syncDataset, os.path.join(FIG_SAVE_DIR, 'unit_quality'), prefix=figure_prefix)
     
     ### Plot visual responses
     get_RFs(probe_dict, mapping_data, mapping_start_frame, FRAME_APPEAR_TIMES, os.path.join(FIG_SAVE_DIR, 'receptive_fields'), prefix=figure_prefix)
