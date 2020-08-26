@@ -62,9 +62,7 @@ class lims_data_getter(data_getter):
         self.cursor = self.con.cursor(
                     cursor_factory=extras.RealDictCursor,
                 )
-        self.cursor = self.con.cursor(
-                    cursor_factory=extras.RealDictCursor,
-                )
+
         self.lims_id = exp_id
 
     
@@ -100,6 +98,12 @@ class lims_data_getter(data_getter):
             WHERE es.id = {} 
             ORDER BY es.id
             '''  
+        image_qry = '''
+            SELECT *
+            FROM ecephys_sessions es
+            JOIN images im ON im.id=es.id
+            WHERE es.id = {}
+        '''
         
         self.cursor.execute(WKF_QRY.format(self.lims_id))
         exp_data = self.cursor.fetchall()
@@ -183,9 +187,12 @@ class local_data_getter(data_getter):
                 'replay_pkl': '*replay*.pkl',
                 'behavior_pkl': '*behavior*.pkl',
                 'sync_file': '*.sync',
-                'RawEyeTrackingVideo': '*.eye.avi',
-                'RawBehaviorTrackingVideo': '*behavior.avi',
-                'RawFaceTrackingVideo': '*face.avi',
+                'RawEyeTrackingVideo': ['*.eye.avi', '*eye.mp4'],
+                'RawBehaviorTrackingVideo': ['*behavior.avi', '*behavior.mp4'],
+                'RawFaceTrackingVideo': ['*face.avi', '*face.mp4'],
+                'RawEyeTrackingVideoMetadata': '*eye.json',
+                'RawBehaviorTrackingVideoMetadata': '*face.json',
+                'RawFaceTrackingVideoMetadata': '*behavior.json',
                 }
         
         for fn in file_glob_dict:

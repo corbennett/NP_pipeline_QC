@@ -90,9 +90,10 @@ def plot_psth_change_flashes(change_times, spikes, preTime = 0.05, postTime = 0.
     
     return sdf, t
 
+
 def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, windowBefore=0.5, windowAfter=0.5, min_inter_lick_time = 0.5, behavior_duration=3600): 
-    first_lick_times = lick_times[np.insert(np.diff(lick_times)>=min_inter_lick_time, 0, True)]
-    first_lick_times = first_lick_times[first_lick_times>lfp_time[0]+windowBefore]
+    
+    first_lick_times = lick_times[lick_times>lfp_time[0]+windowBefore]
     first_lick_times = first_lick_times[:np.min([len(first_lick_times), num_licks])]
     
     probeSampleRate = 1./np.median(np.diff(lfp_time))
@@ -116,6 +117,71 @@ def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, 
     m = np.nanmean(lickTriggeredAv, axis=0)*0.195  #convert to uV
     mtime = np.linspace(-windowBefore, windowAfter, m.size)  
     return m, mtime, first_lick_times
+
+
+def plot_lick_triggered_LFP(lfp_dict, lick_times, FIG_SAVE_DIR, prefix='', 
+                            agarChRange=None, num_licks=20, windowBefore=0.5, 
+                            windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
+    
+    for p in lfp_dict:
+
+        plfp = lfp_dict[p]['lfp']
+        lta, ltime, first_lick_times = analysis.lickTriggeredLFP(lick_times, plfp, lfp_dict[p]['time'], 
+                                               agarChRange=[325, 350], num_licks=20, windowBefore=windowBefore,
+                                               windowAfter=windowAfter, min_inter_lick_time=0.5)
+        
+        fig, axes = plt.subplots(2,1)
+        fig.suptitle(p + ' Lick-triggered LFP, ' + str(len(first_lick_times)) + ' rewarded lick bouts')
+        axes[0].imshow(lta.T, aspect='auto')
+        axes[1].plot(np.mean(lta, axis=1), 'k')
+        for a in axes:
+            a.set_xticks(np.arange(0, windowBefore+windowAfter, windowBefore)*2500)
+            a.set_xticklabels(np.round(np.arange(-windowBefore, windowAfter, windowBefore), decimals=2))
+            
+        axes[1].set_xlim(axes[0].get_xlim())
+        axes[0].tick_params(bottom=False, labelbottom=False)
+        axes[1].set_xlabel('Time from lick bout (s)')
+        axes[0].set_ylabel('channel')
+        axes[1].set_ylabel('Mean across channels')
+        
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' lick-triggered LFP'))
+
+
+def get_first_lick_times(lick_times, min_inter_lick_time=0.5, rewarded=True):
+    
+    first_lick_times = lick_times[np.insert(np.diff(lick_times)>=min_inter_lick_time, 0, True)]
+    
+    return first_lick_times
+
+
+def get_rewarded_lick_times(lickTimes, frameTimes, trials, min_inter_lick_time=0.5):
+    
+    trial_start_frames = np.array(trials['startframe'])
+    trial_end_frames = np.array(trials['endframe'])
+    trial_start_times = frameTimes[trial_start_frames]
+    trial_end_times = frameTimes[trial_end_frames]
+    
+    first_lick_times = lickTimes[np.insert(np.diff(lickTimes)>=min_inter_lick_time, 0, True)]
+    first_lick_trials = get_trial_by_time(first_lick_times, trial_start_times, trial_end_times)
+    
+    hit = np.array(trials['response_type']=='HIT')
+    
+    hit_lick_times = first_lick_times[np.where(hit[first_lick_trials])[0]]
+
+    return hit_lick_times
+
+
+def get_trial_by_time(times, trial_start_times, trial_end_times):
+    trials = []
+    for time in times:
+        if trial_start_times[0]<=time<trial_end_times[-1]:
+            trial = np.where((trial_start_times<=time)&(trial_end_times>time))[0][0]
+        else:
+            trial = -1
+        trials.append(trial)
+    
+    return np.array(trials)
+
 
 def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count, 
                          behavior_start_frame, mapping_start_frame, 
@@ -324,23 +390,41 @@ def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR, prefix=''):
         #fig.savefig(os.path.join(FIG_SAVE_DIR, 'Probe_{}_unit_distribution.png'.format(probe)))
     
   
-def plot_all_spike_hist(probe_dirs, FIG_SAVE_DIR, prefix=''):
+def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
     
-    for ip, probe in enumerate(probe_dirs):
-        p_name = probe.split('_')[-2][-1]
-        base = os.path.join(os.path.join(probe, 'continuous'), 'Neuropix-PXI-100.0')
-        times_file = glob_file(base, 'spike_times.npy')
-        if times_file is not None:
-            times = np.load(times_file)
-            times = times/30000.
-            
-            fig, ax = plt.subplots()
-            bins = np.arange(0, times.max(), 1)
-            hist, b = np.histogram(times, bins=bins)
-            ax.plot(b[:-1], hist, 'k')
-            
-            fig.suptitle('Probe {} all spike time histogram'.format(p_name))
-            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_all_spike_time_hist.png'.format(p_name)))
+    flatten = lambda l: [item[0] for sublist in l for item in sublist]
+
+    for p in probe_dict:
+        u_df = probe_dict[p]
+        good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+        
+        spikes = flatten(good_units['times'].to_list())
+        binwidth = 1
+        bins = np.arange(0, np.max(spikes), binwidth)
+        hist, bin_e = np.histogram(spikes, bins)
+        
+        fig, ax = plt.subplots()
+        fig.suptitle('spike histogram (good units), Probe ' + p)
+        ax.plot(bin_e[1:-1], hist[1:])
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Spike Count per ' + str(binwidth) + ' second bin')
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram'))
+    
+#    for ip, probe in enumerate(probe_dirs):
+#        p_name = probe.split('_')[-2][-1]
+#        base = os.path.join(os.path.join(probe, 'continuous'), 'Neuropix-PXI-100.0')
+#        times_file = glob_file(base, 'spike_times.npy')
+#        if times_file is not None:
+#            times = np.load(times_file)
+#            times = times/30000.
+#            
+#            fig, ax = plt.subplots()
+#            bins = np.arange(0, times.max(), 1)
+#            hist, b = np.histogram(times, bins=bins)
+#            ax.plot(b[:-1], hist, 'k')
+#            
+#            fig.suptitle('Probe {} all spike time histogram'.format(p_name))
+#            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_all_spike_time_hist.png'.format(p_name)))
 
 
 def plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
@@ -412,6 +496,41 @@ def probe_sync_report(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
     save_json(alignment_dict, save_file)
 
 
+
+def lost_camera_frame_report(paths, FIG_SAVE_DIR, prefix=''):
+    
+    cam_report_keys = [('RawBehaviorTrackingVideoMetadata', 'Behavior'),
+                       ('RawEyeTrackingVideoMetadata', 'Eye'),
+                       ('RawFaceTrackingVideoMetadata', 'Face')]
+    
+    report = {}
+    for cam, name in cam_report_keys:
+        cam_meta = read_json(paths[cam])
+        cam_meta = cam_meta['RecordingReport']
+        report[name] = {}
+        
+        lost = cam_meta['FramesLostCount']
+        recorded = cam_meta['FramesRecorded']
+        
+        report[name]['lost frame count'] = lost
+        report[name]['recorded frame count'] = recorded
+        report[name]['percent lost'] = 100*lost/(lost+recorded)
+
+    save_file = os.path.join(FIG_SAVE_DIR, prefix+'cam_frame_report.json')
+    save_json(report, save_file)
+    
+
+def make_metadata_json(behavior_pickle, replay_pickle, FIG_SAVE_DIR, prefix=''):
+    
+    report = {}
+    report['mouse_id'] = replay_pickle['mouse_id']
+    report['foraging_id'] = replay_pickle['foraging_id']['value']
+    report['start time'] = behavior_pickle['start_time'].strftime('%Y%m%d%H%M%S')
+    
+    save_file = os.path.join(FIG_SAVE_DIR, prefix+'metadata.json')
+    save_json(report, save_file)
+    
+
 def save_json(to_save, save_path):
     
     save_dir = os.path.dirname(save_path)
@@ -429,3 +548,14 @@ def save_figure(fig, save_path):
         os.mkdir(save_dir)
     
     fig.savefig(save_path)
+    
+
+def read_json(path):
+    
+    with open(path, 'r') as f:
+        j = json.load(f)
+    
+    return j
+
+    
+    

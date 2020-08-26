@@ -205,11 +205,6 @@ def getLFPData(probeBase, syncDataset, num_channels=384):
     time_stamps = np.load(os.path.join(lfp_data_dir, 'lfp_timestamps.npy'))
         
     
-    #Get barcodes from sync file
-#    if 'barcode' in syncDataset.line_labels:
-#        bRising, bFalling = get_sync_line_data(syncDataset, 'barcode')
-#    elif 'barcodes' in syncDataset.line_labels:
-#        bRising, bFalling = get_sync_line_data(syncDataset, 'barcodes')
     bRising, bFalling = get_sync_line_data(syncDataset, channel=0)
     bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
     
@@ -228,6 +223,19 @@ def getLFPData(probeBase, syncDataset, num_channels=384):
     time_stamps_shifted = (time_stamps/p_sampleRate) - shift
     
     return lfp_data_reshape, time_stamps_shifted
+
+
+def build_lfp_dict(probe_dirs, syncDataset):
+    
+    lfp_dict = {}
+
+    for ip, probe in enumerate(probe_dirs):
+        p_name = probe.split('_')[-2][-1]
+        
+        lfp, time = getLFPData(probe, syncDataset)
+        lfp_dict[p_name] = {'time': time, 'lfp': lfp}
+    
+    return lfp_dict
 
 
 def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
@@ -330,3 +338,16 @@ def get_stim_starts_ends(sync_dataset, fallback_line=5):
     return stim_ons, stim_offs
 
 
+def get_lick_times(sync_dataset, fallback_line=31):
+    
+    lines = sync_dataset.line_labels
+    
+    lick_line = fallback_line
+    for line in lines:
+        if 'lick' in line:
+            lick_line = line
+    
+    lick_times = sync_dataset.get_rising_edges(lick_line, units='seconds')
+    
+    return lick_times
+    
