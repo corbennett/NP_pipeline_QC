@@ -6,6 +6,7 @@ Created on Sat Feb 22 14:18:35 2020
 """
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib.gridspec as gridspec
 import os
 import analysis
 from numba import njit
@@ -15,6 +16,7 @@ import ecephys
 from probeSync_qc import get_sync_line_data
 import probeSync_qc as probeSync
 import json
+import cv2
 
 
 def find_spikes_per_trial(spikes, trial_starts, trial_ends):
@@ -497,27 +499,64 @@ def probe_sync_report(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
 
 
 
-def lost_camera_frame_report(paths, FIG_SAVE_DIR, prefix=''):
+def lost_camera_frame_report(paths, FIG_SAVE_DIR, prefix='', cam_report_keys=None):
     
-    cam_report_keys = [('RawBehaviorTrackingVideoMetadata', 'Behavior'),
-                       ('RawEyeTrackingVideoMetadata', 'Eye'),
-                       ('RawFaceTrackingVideoMetadata', 'Face')]
+    if cam_report_keys is None:
+        cam_report_keys = [('RawBehaviorTrackingVideoMetadata', 'Behavior'),
+                           ('RawEyeTrackingVideoMetadata', 'Eye'),
+                           ('RawFaceTrackingVideoMetadata', 'Face')]
     
     report = {}
     for cam, name in cam_report_keys:
-        cam_meta = read_json(paths[cam])
-        cam_meta = cam_meta['RecordingReport']
-        report[name] = {}
-        
-        lost = cam_meta['FramesLostCount']
-        recorded = cam_meta['FramesRecorded']
-        
-        report[name]['lost frame count'] = lost
-        report[name]['recorded frame count'] = recorded
-        report[name]['percent lost'] = 100*lost/(lost+recorded)
+        if cam in paths:
+            cam_meta = read_json(paths[cam])
+            cam_meta = cam_meta['RecordingReport']
+            report[name] = {}
+            
+            lost = cam_meta['FramesLostCount']
+            recorded = cam_meta['FramesRecorded']
+            
+            report[name]['lost frame count'] = lost
+            report[name]['recorded frame count'] = recorded
+            report[name]['percent lost'] = 100*lost/(lost+recorded)
 
     save_file = os.path.join(FIG_SAVE_DIR, prefix+'cam_frame_report.json')
     save_json(report, save_file)
+    
+
+def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoch_frame_nums = [4,2,4], prefix='', cam_video_keys=None, num_frames=10):
+    
+    if cam_video_keys is None:
+        cam_video_keys = [('RawBehaviorTrackingVideo', 'Behavior'),
+                           ('RawEyeTrackingVideo', 'Eye'),
+                           ('RawFaceTrackingVideo', 'Face')]
+    
+    videos_present = [c[0] for c in cam_video_keys if c[0] in paths]
+    num_videos = len(videos_present)
+    
+    #get frames spanning the 3 script epochs
+    frames_to_grab = get_frames_from_epochs(videos_present, syncDataset, epoch_start_times, epoch_frame_nums)
+    
+    fig = plt.figure(constrained_layout=True, facecolor='0.5')
+    gs = gridspec.GridSpec(num_videos, num_frames, figure=fig)
+    gs.update(wspace=0.0, hspace=0.0)
+    for ic, cam in enumerate(videos_present):
+        video_path = paths[cam]
+        v = cv2.VideoCapture(video_path)
+        total_frames = v.get(cv2.CAP_PROP_FRAME_COUNT)
+        
+        for i,f in enumerate(frames_to_grab):
+            v.set(cv2.CAP_PROP_POS_FRAMES, f)
+            ret, frame = v.read()
+            ax = fig.add_subplot(gs[ic, i])
+            ax.imshow(frame)
+            ax.axis('off')
+    
+    plt.tight_layout()
+    
+def get_frames_from_epochs(syn, epoch_start_times, epoch_frame_nums):
+    
+    
     
 
 def make_metadata_json(behavior_pickle, replay_pickle, FIG_SAVE_DIR, prefix=''):

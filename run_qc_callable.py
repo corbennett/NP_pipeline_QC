@@ -89,6 +89,9 @@ def run_qc(exp_id, save_root):
                                                              mapping_frame_count,
                                                              replay_frame_count])
     
+    behavior_start_time, mapping_start_time, replay_start_time = [FRAME_APPEAR_TIMES[f] for f in 
+                                                                  [behavior_start_frame, mapping_start_frame,replay_start_frame]]
+    
     MONITOR_LAG = 0.036 #TO DO: don't hardcode this...
     FRAME_APPEAR_TIMES = vf + MONITOR_LAG  
     
@@ -133,5 +136,5 @@ def run_qc(exp_id, save_root):
     ### VIDEOS ###
     video_dir = os.path.join(FIG_SAVE_DIR, 'videos')
     analysis.lost_camera_frame_report(paths, video_dir, prefix=figure_prefix)
-    
+    analysis.camera_frame_grabs(paths, video_dir, [behavior_start_time, mapping_start_time, replay_start_time], prefix=figure_prefix)
     

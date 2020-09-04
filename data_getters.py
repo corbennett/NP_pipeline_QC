@@ -29,6 +29,7 @@ class data_getter():
         self.connect(exp_id, base_dir)
         self.get_exp_data()
         self.get_probe_data()
+        self.get_image_data()
         
     
     def connect(self):
@@ -43,7 +44,10 @@ class data_getter():
         pass
         
     
+    def get_image_data(self):
+        pass
     
+
 class lims_data_getter(data_getter):
     
     def connect(self, exp_id, base_dir):
@@ -98,12 +102,7 @@ class lims_data_getter(data_getter):
             WHERE es.id = {} 
             ORDER BY es.id
             '''  
-        image_qry = '''
-            SELECT *
-            FROM ecephys_sessions es
-            JOIN images im ON im.id=es.id
-            WHERE es.id = {}
-        '''
+        
         
         self.cursor.execute(WKF_QRY.format(self.lims_id))
         exp_data = self.cursor.fetchall()
@@ -122,6 +121,29 @@ class lims_data_getter(data_getter):
         self.data_dict['datestring'] = self.data_dict['date_of_acquisition'].strftime('%Y%m%d')
         self.data_dict['es_id'] = str(self.data_dict['es_id'])
         
+    def get_image_data(self):
+        '''Get all the images associated with this experiment 
+        '''
+        
+        IMAGE_QRY = '''
+            SELECT es.id AS es_id, es.name AS es, imt.name AS image_type, es.storage_directory || j.id || '/' || im.jp2 AS image_path
+            FROM ecephys_sessions es
+                JOIN observatory_associated_data oad ON oad.observatory_record_id = es.id AND oad.observatory_record_type = 'EcephysSession'
+                JOIN images im ON im.id=oad.observatory_file_id AND oad.observatory_file_type = 'Image'
+                JOIN image_types imt ON imt.id=im.image_type_id
+                JOIN jobs j ON j.enqueued_object_id=es.id AND j.archived = 'f' AND j.job_queue_id = (SELECT id FROM job_queues WHERE name = 'ECEPHYS_SESSION_UPLOAD_QUEUE')
+            WHERE es.id = {}
+            ORDER BY es.id, imt.name;
+            '''
+        
+        self.cursor.execute(IMAGE_QRY.format(self.lims_id))
+        image_data = self.cursor.fetchall()
+        
+        for im in image_data:
+            name = im['image_type']
+            path = im['image_path']
+            self.data_dict[name] = convert_lims_path(path)
+            
         
     def get_probe_data(self):
         ''' Get sorted ephys data for each probe 
@@ -157,6 +179,13 @@ class lims_data_getter(data_getter):
             self.data_dict['data_probes'].append(probeID)
             self.data_dict['probe' + probeID] = pb
         
+        raw = [p for p in probe_data if p['wkft']=='EcephysProbeRawData']
+        name_suffix = {'probeA':'ABC', 'probeB':'ABC', 'probeC':'ABC', 'probeD':'DEF', 'probeE':'DEF', 'probeF':'DEF'}
+        for r in raw:
+            probeID = r['ep']
+            name = r['wkft'] + name_suffix[probeID]
+            self.data_dict[name] = convert_lims_path(r['wkf_path'])
+            
         self.probe_data = probe_data
         
         
