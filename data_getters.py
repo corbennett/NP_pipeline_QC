@@ -171,7 +171,7 @@ class lims_data_getter(data_getter):
         probe_data = self.cursor.fetchall()
         
         p_info = [p for p in probe_data if p['wkft']=='EcephysSortedProbeInfo']
-        probe_bases = [convert_lims_path(os.path.dirname(pi['wkf_path']))[1:] for pi in p_info]
+        probe_bases = [convert_lims_path(os.path.dirname(pi['wkf_path'])) for pi in p_info]
         
         self.data_dict['data_probes'] = []
         for pb in probe_bases:
@@ -184,7 +184,14 @@ class lims_data_getter(data_getter):
         for r in raw:
             probeID = r['ep']
             name = r['wkft'] + name_suffix[probeID]
-            self.data_dict[name] = convert_lims_path(r['wkf_path'])
+            path = convert_lims_path(r['wkf_path'])
+            
+            if not name+'_settings' in self.data_dict or self.data_dict[name+'_settings'] is None:
+                self.data_dict[name+'_settings'] = path
+            
+            npx2_path = glob_file(os.path.join(os.path.dirname(path), '*npx2'))
+            if not name in self.data_dict or self.data_dict[name] is None:
+                self.data_dict[name] = npx2_path
             
         self.probe_data = probe_data
         

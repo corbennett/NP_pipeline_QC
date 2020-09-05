@@ -4,88 +4,89 @@ Created on Thu Sep  3 09:44:09 2020
 
 @author: svc_ccg
 """
-import numpy as np
-import os, glob, shutil
 import data_getters
-import datetime
+from D1_LIMS_schema import D1_schema
+from D2_LIMS_schema import D2_schema
 
-import logging 
-
-
-
-D1_schema = {'es_id': {'minimum_size': None},
- 'es': {'minimum_size': None},
- 'storage_directory': {'minimum_size': None},
- 'workflow_state': {'minimum_size': None},
- 'date_of_acquisition': {'minimum_size': None},
- 'stimulus_name': {'minimum_size': None},
- 'foraging_id': {'minimum_size': None},
- 'external_specimen_name': {'minimum_size': None},
- 'isi_experiment_id': {'minimum_size': None},
- 'rig': {'minimum_size': None},
- 'operator': {'minimum_size': None},
- 'project': {'minimum_size': None},
- 'behavior_dir': {'minimum_size': None},
- 'EyeDlcOutputFile': {'minimum_size': 409683458.40000004},
- 'EcephysPlatformFile': {'minimum_size': 5947.200000000001},
- 'StimulusPickle': {'minimum_size': 7339021.600000001},
- 'EcephysRigSync': {'minimum_size': 74143171.2},
- 'EcephysSurgeryNotes': {'minimum_size': 1314.4},
- 'EcephysReplayStimulus': {'minimum_size': 27547471.200000003},
- 'OptoPickle': {'minimum_size': 959931.2000000001},
- 'NewstepConfiguration': {'minimum_size': 4641961.600000001},
- 'RawFaceTrackingVideo': {'minimum_size': 1955874822.4},
- 'RawFaceTrackingVideoMetadata': {'minimum_size': 690.4000000000001},
- 'RawEyeTrackingVideo': {'minimum_size': 1956543098.4},
- 'RawEyeTrackingVideoMetadata': {'minimum_size': 689.6},
- 'RawBehaviorTrackingVideo': {'minimum_size': 1956597323.2},
- 'RawBehaviorTrackingVideoMetadata': {'minimum_size': 696.0},
- 'EcephysAreaClassifications': {'minimum_size': 611.2},
- 'mapping_pkl': {'minimum_size': 7339021.600000001},
- 'replay_pkl': {'minimum_size': 27547471.200000003},
- 'sync_file': {'minimum_size': 74143171.2},
- 'behavior_pkl': {'minimum_size': 18428066.400000002},
- 'datestring': {'minimum_size': None},
- 'data_probes': {'minimum_size': None},
- 'EcephysProbeRawDataABC': {'minimum_size': 1843772.0},
- 'EcephysProbeRawDataDEF': {'minimum_size': 1843772.0},
- 'EcephysBrainSurfaceLeft': {'minimum_size': 1311537.6},
- 'EcephysBrainSurfaceRight': {'minimum_size': 1316493.6},
- 'EcephysFiducialImage': {'minimum_size': 1606833.6},
- 'EcephysInsertionLocationImage': {'minimum_size': 983416.0},
- 'EcephysOverlayImage': {'minimum_size': 542164.0},
- 'EcephysPostExperimentLeft': {'minimum_size': 1308762.4000000001},
- 'EcephysPostExperimentRight': {'minimum_size': 1321449.6},
- 'EcephysPostInsertionLeft': {'minimum_size': 1376120.0},
- 'EcephysPostInsertionRight': {'minimum_size': 1391095.2000000002},
- 'EcephysPostStimulusLeft': {'minimum_size': 1382569.6},
- 'EcephysPostStimulusRight': {'minimum_size': 1393450.4000000001},
- 'EcephysPreExperimentLeft': {'minimum_size': 1400624.0},
- 'EcephysPreExperimentRight': {'minimum_size': 1421704.0},
- 'EcephysPreInsertionLeft': {'minimum_size': 1334457.6},
- 'EcephysPreInsertionRight': {'minimum_size': 1339092.8}}
+import os, sys, json
 
 
-
+def run_validation(lims_id, savePath=None):
+    
+    validator = lims_validation(lims_id)
+    if 'Error' in validator:
+        D1_report = {'upload_exists':False}
+        D2_report = {'upload_exists': False}
+    else:
+        D1_report = upload_summary(validator['D1'])
+        D2_report = upload_summary(validator['D2'])
+        
+    if savePath:
+        master_report = {
+                'D1_upload_summary': D1_report,
+                'D2_upload_summary': D2_report,
+                'file_validation':validator,
+                         }
+        save_json(master_report, savePath)
+    
 def lims_validation(lims_id):
     
-    d = data_getters.lims_data_getter(lims_id)
-    paths = d.data_dict
+    try:
+        d = data_getters.lims_data_getter(lims_id)
+        paths = d.data_dict
+        storage_dir = os.path.normpath(paths['storage_directory'])
+        lims_validator = {'storage_directory': storage_dir,
+                          'D1':{}, 'D2':{}}
+        lims_validator['D1'] = check_schema(D1_schema, paths)
+        lims_validator['D2'] = check_schema(D2_schema, paths)
     
-    lims_validator = {'D1':{}, 'D2':{}}
+    except:
+        lims_validator = {'Error':str(sys.exc_info()[0]) + 
+                          '  ' + str(sys.exc_info()[1]) + 
+                          '  ' + str(sys.exc_info()[2])}
     
-    for key in D1_schema:
+    return lims_validator
+
+
+def check_schema(schema, paths):
+    
+    validation_dict = {}
+    for key in schema:
         
-        (meets_size_criterion, size, criterion) = validate_schema_entry_size(D1_schema, key, paths)
+        (meets_size_criterion, size, criterion) = validate_schema_entry_size(schema, key, paths)
         
-        lims_validator['D1'][key] = {
+        validation_dict[key] = {
                 'exists': validate_schema_entry_existence(paths, key),
                 'file_size': size,
                 'min_expected_size': criterion,
-                'exceeds_min_expected': meets_size_criterion}
+                'meets_size_criterion': meets_size_criterion}   
     
-    return lims_validator
-            
+    return validation_dict
+
+
+def upload_summary(validator):
+    
+    report = {'pass': False, 'errors':[]}
+    
+    exists = []
+    meets_size = []
+    for entry in validator:
+        
+        ex = validator[entry]['exists']
+        if not ex:
+            report['errors'].append('File {} does not exist'.format(entry))
+        exists.append(ex)
+        
+        ms = validator[entry]['meets_size_criterion']
+        if ex and not ms:
+            report['errors'].append('File {} does not meet size criterion'.format(entry))
+        meets_size.append(ms)
+    
+    report['pass'] = all(exists) & all(meets_size)
+    report['upload_exists'] = any(exists)
+    
+    return report
+    
 
 def validate_schema_entry_existence(paths, entry):
     
@@ -93,6 +94,8 @@ def validate_schema_entry_existence(paths, entry):
         return False
     elif paths[entry] is None:
         return False
+#    elif not os.path.exists(paths[entry]):
+#        return False
     else:
         return True
                     
@@ -102,11 +105,14 @@ def validate_schema_entry_size(schema, entry, paths):
     min_size = schema[entry]['minimum_size']
     if not min_size:
         return (True, None, None)
+    elif not entry in paths:
+        return(False, None, None)
     else:
         file_size = get_file_size(paths[entry])
         return (file_size > min_size, file_size, min_size)
     
-        
+
+
 def get_file_size(file):
     
     if file is None:
@@ -114,21 +120,20 @@ def get_file_size(file):
     
     elif not os.path.exists(file):
         print('File {} does not exist'.format(file))
-        return
+        return -1
     
     file_size = os.path.getsize(file)
     return file_size
-        
-        
 
 
-#schema = {k: {'minimum_size':None} for k in paths}
-#for p in paths:
-#    file = paths[p]
-#    if not isinstance(file, str):
-#        pass
-#    elif os.path.isfile(file):
-#        size = get_file_size(file)
-#        schema[p]['minimum_size'] = 0.8*size
+def save_json(to_save, save_path):
+    
+    save_dir = os.path.dirname(save_path)
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
         
+    with open(save_path, 'w') as f:
+        json.dump(to_save, f, indent=2)     
+        
+
         
