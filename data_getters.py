@@ -98,11 +98,10 @@ class lims_data_getter(data_getter):
                 JOIN projects p ON p.id = es.project_id
                 LEFT JOIN well_known_files wkf ON wkf.attachable_id = es.id
                 LEFT JOIN well_known_file_types wkft ON wkft.id=wkf.well_known_file_type_id
-                JOIN behavior_sessions bs ON bs.foraging_id = es.foraging_id
+                LEFT JOIN behavior_sessions bs ON bs.foraging_id = es.foraging_id
             WHERE es.id = {} 
             ORDER BY es.id
             '''  
-        
         
         self.cursor.execute(WKF_QRY.format(self.lims_id))
         exp_data = self.cursor.fetchall()
@@ -118,7 +117,10 @@ class lims_data_getter(data_getter):
         
         behavior_dir = convert_lims_path(self.data_dict['behavior_dir'])
         self.data_dict['behavior_pkl'] = glob_file(os.path.join(behavior_dir, '*.pkl'))
-        self.data_dict['datestring'] = self.data_dict['date_of_acquisition'].strftime('%Y%m%d')
+        if self.data_dict['date_of_acquisition'] is not None:
+            self.data_dict['datestring'] = self.data_dict['date_of_acquisition'].strftime('%Y%m%d')
+        else:
+            self.data_dict['datestring'] = ''
         self.data_dict['es_id'] = str(self.data_dict['es_id'])
         
     def get_image_data(self):
@@ -170,8 +172,11 @@ class lims_data_getter(data_getter):
         self.cursor.execute(WKF_PROBE_QRY.format(self.lims_id))
         probe_data = self.cursor.fetchall()
         
-        p_info = [p for p in probe_data if p['wkft']=='EcephysSortedProbeInfo']
-        probe_bases = [convert_lims_path(os.path.dirname(pi['wkf_path'])) for pi in p_info]
+        p_info = [p for p in probe_data if p['wkft']=='EcephysSortedAmplitudes']
+        
+        getnesteddir = lambda x: os.path.dirname(os.path.dirname(os.path.dirname(x)))
+        probe_bases = [convert_lims_path(getnesteddir(pi['wkf_path'])) for pi in p_info]
+        #probe_bases = [convert_lims_path(os.path.dirname(pi['wkf_path'])) for pi in p_info]
         
         self.data_dict['data_probes'] = []
         for pb in probe_bases:
@@ -267,7 +272,11 @@ def glob_file(file_path):
         return None
 
 def convert_lims_path(path):
-    new_path = r'\\' + os.path.normpath(path)[1:]
+    if path is not None:
+        new_path = r'\\' + os.path.normpath(path)[1:]
+    else:
+        new_path = ''
+        
     return new_path
         
         

@@ -238,6 +238,10 @@ def build_lfp_dict(probe_dirs, syncDataset):
     return lfp_dict
 
 
+def get_surface_channels(probe_dirs):
+    pass
+
+
 def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
     ''' Tries to infer which vsyncs correspond to the frames in the epochs in frame_counts
         This allows you to align data even when there are aborted stimuli

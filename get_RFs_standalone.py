@@ -16,6 +16,7 @@ import data_getters
 import logging
 import sys
 from analysis import save_figure
+import pickle
 # sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
 
@@ -149,8 +150,12 @@ if __name__ == "__main__":
         print('RF mapping started at frame {}, or experiment time {} seconds'.format(start_frame[0], start_frame[0]/60.))
         
         probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
-        get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, prefix=figure_prefix)
-
+        rf_mat = get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, return_rfs=True, prefix=figure_prefix)
+        rf_save_dir = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\rf_summary"
+        with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:
+            pickle.dump(rf_mat, fp)
+        #np.save(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), rf_mat)
+    
     else:
         logging.error('Could not find mapping stim start frame')
 
