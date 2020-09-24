@@ -260,8 +260,19 @@ class local_data_getter(data_getter):
             if probe_base is not None:
                 self.data_dict['data_probes'].append(probeID)
                 self.data_dict['probe' + probeID] = probe_base
-  
-        
+                
+                metrics_file = glob_file(os.path.join(probe_base, r'continuous\Neuropix-PXI-100.0\metrics.csv'))
+                self.data_dict['probe' + probeID + '_metrics'] = metrics_file
+    
+    def get_image_data(self):
+         
+         for probeID in self.data_dict['data_probes']:
+             
+             probe_base = self.data_dict['probe'+probeID]
+             probe_depth_image = glob_file(os.path.join(probe_base, 'probe_depth*.png'))
+             if probe_depth_image is not None:
+                 self.data_dict['probe_depth_'+probeID] = probe_depth_image
+             
         
 
 def glob_file(file_path):

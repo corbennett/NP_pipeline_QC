@@ -134,7 +134,7 @@ def check_schema(schema, paths):
     '''
     validation_dict = {}
     for key in schema:
-        print(key)
+
         (meets_size_criterion, size, criterion) = validate_schema_entry_size(schema, key, paths)
         
         validation_dict[key] = {

@@ -7,6 +7,8 @@ Created on Sat Feb 22 14:18:35 2020
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.ticker import FormatStrFormatter
+import matplotlib.patches as mpatches
 import os
 import analysis
 from numba import njit
@@ -17,7 +19,15 @@ from probeSync_qc import get_sync_line_data
 import probeSync_qc as probeSync
 import json
 import cv2
+import shutil
 
+
+probe_color_dict = {'A': 'orange',
+                        'B': 'r',
+                        'C': 'k',
+                        'D': 'g',
+                        'E': 'b',
+                        'F': 'm'}
 
 def find_spikes_per_trial(spikes, trial_starts, trial_ends):
     tsinds = np.searchsorted(spikes, trial_starts)
@@ -226,10 +236,13 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
 
 
-def vsync_report(vf, FIG_SAVE_DIR, prefix=''):
+def vsync_report(vf, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
     
     report = {}
     intervals = np.diff(vf)
+    report['sync_vsync_frame_count'] = len(vf)
+    report['pkl frame count'] = total_pkl_frames
+    report['sync_pkl_framecount_match'] = 'TRUE' if len(vf)==total_pkl_frames else 'FALSE'
     report['mean interval'] = intervals.mean()
     report['median interval'] = np.median(intervals)
     report['std of interval'] = intervals.std()
@@ -243,12 +256,7 @@ def vsync_report(vf, FIG_SAVE_DIR, prefix=''):
 def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, 
                                     trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
-    probe_color_dict = {'A': 'orange',
-                        'B': 'r',
-                        'C': 'k',
-                        'D': 'g',
-                        'E': 'b',
-                        'F': 'm'}
+    
     change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
     active_change_times = FRAME_APPEAR_TIMES[change_frames]
     first_passive_frame = behavior_frame_count + mapping_frame_count
@@ -309,7 +317,7 @@ def plot_population_change_response(probe_dict, behavior_frame_count, mapping_fr
 def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, prefix=''):   
     
     ### Plot Running Wheel Data ###    
-    rfig, rax = plt.subplots()
+    rfig, rax = plt.subplots(2,1)
     rfig.set_size_inches(12, 4)
     rfig.suptitle('Running')
     time_offset = 0
@@ -321,13 +329,22 @@ def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, p
         
         dx,vsig,vin = [rpkl['items'][key]['encoders'][0][rkey] for rkey in ('dx','vsig','vin')]
         
+#        cum_dist = np.cumsum(dx)
+#        cum_dist = cum_dist[:len(time)]
+        
         run_speed = visual_behavior.analyze.compute_running_speed(dx[:len(time)],time,vsig[:len(time)],vin[:len(time)])
-        rax.plot(time+time_offset, run_speed, colors[ri])
+        cum_dist = np.cumsum(run_speed)*0.01667*0.01 # dist = speed*time then convert to meters
+        rax[0].plot(time+time_offset, run_speed, colors[ri])
+        rax[1].plot(time+time_offset, cum_dist, colors[ri])
         time_offset = time_offset + time[-1]
         
-    rax.set_xlabel('Time (s)')
-    rax.set_ylabel('Run Speed (cm/s)')
-    rax.legend(['behavior', 'rf map', 'passive'])
+    #rax[0].set_xlabel('Time (s)')
+    rax[0].set_ylabel('Run Speed (cm/s)')
+    rax[0].legend(['behavior', 'rf map', 'passive'])
+    
+    rax[1].set_ylabel('Cumulative Distance (m)')
+    rax[0].set_xlabel('Time (s)')
+    
     save_figure(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.png'))
     #rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
 
@@ -477,6 +494,68 @@ def plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix='')
             
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_barcode_interval_hist.png'.format(p_name)))
 
+def plot_barcode_intervals(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
+    
+    fig, ax = plt.subplots()
+    fig.suptitle('Sync Barcode Intervals')
+    bs_t, bs = probeSync.get_sync_barcodes(syncDataset)
+    ax.plot(np.diff(bs_t), 'k')
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    
+    pfig, pax = plt.subplots(1,2)
+    pfig.set_size_inches([8,4])
+    pfig.suptitle('Probe Barcode Intervals')
+    for ip, probe in enumerate(probe_dirs):
+        
+        p_name = probe.split('_')[-2][-1]     
+        be_t, be = probeSync.get_ephys_barcodes(probe)
+        shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
+        
+        pax[0].plot(np.diff(be_t), probe_color_dict[p_name])
+        pax[0].set_title('uncorrected')
+        pax[1].plot(np.diff(be_t)*(30000./p_sampleRate), probe_color_dict[p_name])
+        pax[1].set_title('corrected')
+    
+    pax[0].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    pax[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    pax[0].legend([probe.split('_')[-2][-1] for probe in probe_dirs])
+    
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Sync_barcode_intervals.png'))
+    save_figure(pfig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_barcode_intervals.png'))
+    
+
+def plot_barcode_matches(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
+    
+    bs_t, bs = probeSync.get_sync_barcodes(syncDataset)
+    
+    fig, ax = plt.subplots()
+    yticks=[]
+    for ip, probe in enumerate(probe_dirs):
+        
+        p_name = probe.split('_')[-2][-1]     
+        yticks.append(p_name)
+        
+        be_t, be = probeSync.get_ephys_barcodes(probe)
+        match = np.zeros(len(bs))
+        for ib, b in enumerate(bs):
+            if b in be:
+                match[ib]=1
+        
+        matches = np.where(match==1)[0]
+        non_matches = np.where(match==0)[0]
+        ax.plot(matches, np.ones(len(matches))*ip, color = 'g', marker='|', markersize=12, markeredgewidth=3, linewidth=0)
+        ax.plot(non_matches, np.ones(len(non_matches))*ip, color = 'r', marker='|', markersize=12, markeredgewidth=5,linewidth=0)
+    
+    ax.set_yticks(np.arange(len(yticks)))
+    ax.set_yticklabels(yticks)
+    ax.set_xlabel('Barcode Number')
+    ax.set_ylabel('Probe')
+    
+    green_patch = mpatches.Patch(color='green', label='match')
+    red_patch = mpatches.Patch(color='red', label='no match')
+    ax.legend(handles=[green_patch, red_patch])
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'barcode_matching.png'))
+    
     
 def probe_sync_report(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
  
@@ -524,40 +603,69 @@ def lost_camera_frame_report(paths, FIG_SAVE_DIR, prefix='', cam_report_keys=Non
     save_json(report, save_file)
     
 
-def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoch_frame_nums = [4,2,4], prefix='', cam_video_keys=None, num_frames=10):
+def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoch_end_times, epoch_frame_nums = [4,2,4], prefix='', cam_video_keys=None):
     
     if cam_video_keys is None:
-        cam_video_keys = [('RawBehaviorTrackingVideo', 'Behavior'),
-                           ('RawEyeTrackingVideo', 'Eye'),
-                           ('RawFaceTrackingVideo', 'Face')]
+        cam_video_keys = [('RawBehaviorTrackingVideo', 'Behavior', 'beh_frame_received'),
+                           ('RawEyeTrackingVideo', 'Eye', 'eye_frame_received'),
+                           ('RawFaceTrackingVideo', 'Face', 'face_frame_received')]
     
-    videos_present = [c[0] for c in cam_video_keys if c[0] in paths]
+    videos_present = [c for c in cam_video_keys if c[0] in paths]
     num_videos = len(videos_present)
     
     #get frames spanning the 3 script epochs
-    frames_to_grab = get_frames_from_epochs(videos_present, syncDataset, epoch_start_times, epoch_frame_nums)
+    frames_to_grab = get_frames_from_epochs(videos_present, syncDataset, 
+                                            epoch_start_times, epoch_end_times, epoch_frame_nums)
+    
+    cumulative_epoch_frames = np.cumsum(epoch_frame_nums)
+    epoch_colors = ['k', 'g', 'r']
+    get_epoch = lambda x: np.where(cumulative_epoch_frames>x)[-1][0]
     
     fig = plt.figure(constrained_layout=True, facecolor='0.5')
-    gs = gridspec.GridSpec(num_videos, num_frames, figure=fig)
+    fig.set_size_inches([15,7])
+    gs = gridspec.GridSpec(num_videos, np.sum(epoch_frame_nums), figure=fig)
     gs.update(wspace=0.0, hspace=0.0)
-    for ic, cam in enumerate(videos_present):
+    for ic, (cam, camname, sync_line) in enumerate(videos_present):
         video_path = paths[cam]
         v = cv2.VideoCapture(video_path)
-        total_frames = v.get(cv2.CAP_PROP_FRAME_COUNT)
+        frames_of_interest = frames_to_grab[camname]
         
-        for i,f in enumerate(frames_to_grab):
+        for i,f in enumerate(frames_of_interest):
             v.set(cv2.CAP_PROP_POS_FRAMES, f)
             ret, frame = v.read()
             ax = fig.add_subplot(gs[ic, i])
             ax.imshow(frame)
-            ax.axis('off')
+            #ax.axis('off')
+            ax.tick_params(top=False, bottom=False, left=False, right=False, labelleft=False, labelbottom=False)
+            
+            frame_epoch = get_epoch(i)
+            ax.spines['bottom'].set_color(epoch_colors[frame_epoch])
+            ax.spines['top'].set_color(epoch_colors[frame_epoch]) 
+            ax.spines['right'].set_color(epoch_colors[frame_epoch])
+            ax.spines['left'].set_color(epoch_colors[frame_epoch])
     
-    plt.tight_layout()
+    for e,ec,name,c in zip(epoch_frame_nums, cumulative_epoch_frames, 
+                           ['Behavior', 'Mapping', 'Replay'], epoch_colors):
+        
+        xcoord = (ec - e/2)/np.sum(epoch_frame_nums)        
+        fig.text(xcoord, 0.97, name, color=c, size='large', ha='center')
+        
     
-def get_frames_from_epochs(syn, epoch_start_times, epoch_frame_nums):
-    pass
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, 'video_frames.png'))
+    #plt.tight_layout()
     
+def get_frames_from_epochs(videos_present, sync, epoch_start_times, epoch_end_times, epoch_frame_nums):
     
+    frames = {cam[1]:[] for cam in videos_present}
+    for ic, (cam, camname, sync_line) in enumerate(videos_present):
+        
+        frame_times = sync.get_rising_edges(sync_line, units='seconds')
+        for es, ee, enum in zip(epoch_start_times, epoch_end_times, epoch_frame_nums):
+            epoch_times = np.linspace(es, ee, enum+2)
+            closest_frames = np.searchsorted(frame_times, epoch_times[1:-1])
+            frames[camname].extend(closest_frames)
+    return frames
+
 
 def make_metadata_json(behavior_pickle, replay_pickle, FIG_SAVE_DIR, prefix=''):
     
@@ -568,7 +676,21 @@ def make_metadata_json(behavior_pickle, replay_pickle, FIG_SAVE_DIR, prefix=''):
     
     save_file = os.path.join(FIG_SAVE_DIR, prefix+'metadata.json')
     save_json(report, save_file)
+
+
+def copy_probe_depth_images(paths, FIG_SAVE_DIR, prefix=''):
     
+    for file in paths:
+        if 'probe_depth' in file:
+            source_path = paths[file]
+            print(source_path)
+            dest_path = os.path.join(FIG_SAVE_DIR, file+'.png')
+            if not os.path.exists(os.path.dirname(dest_path)):
+                os.mkdir(os.path.dirname(dest_path))
+            shutil.copyfile(source_path, dest_path)
+
+
+
 
 def save_json(to_save, save_path):
     
