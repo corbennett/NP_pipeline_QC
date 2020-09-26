@@ -56,27 +56,42 @@ data_files = {
 #        }
 
 
-def transfer_session(session_base_dir):
+def transfer_session(session_base_dir, probes_to_run = 'ABCDEF'):
     
     rig = get_rig(session_base_dir)
     lims_dir = rig_limsdirectory_dict[rig]
     
     probe_dirs = get_probe_directories(session_base_dir)
     
-    for pd in probe_dirs:
-        
-        p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
-        transfer_d2_files(pd, p_dest_dir)
+    #FIRST VALIDATE THAT ALL FILES ARE PRESENT FOR ALL PROBES; DONT TRANSFER PARTIAL SESSIONS
+    for pd in probe_dirs:   
+        pid = get_probe_id_from_dir(pd)
+        if pid in probes_to_run:
+            file_dict = validate_d2_files(pd)
+            missing = [not(f['exists']) for _,f in file_dict.items()]
+            if any(missing):
+                print('Must have all D2 files before transfer can take place')
+                return
+
+    #IF ALL SESSIONS LOOK GOOD, START TRANSFER            
+    for pd in probe_dirs:   
+        pid = get_probe_id_from_dir(pd)
+        if pid in probes_to_run:
+            p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
+            transfer_d2_files(pd, p_dest_dir, file_dict)
     
 
-
-def transfer_d2_files(session_base_dir, dest_dir):
+def get_probe_id_from_dir(dirname):
     
-    file_dict = validate_d2_files(session_base_dir)
-    missing = [not(f['exists']) for _,f in file_dict.items()]
-    if any(missing):
-        print('Must have all D2 files before transfer can take place')
-        return
+    base_str = os.path.basename(dirname)
+    base_str_parts = base_str.split('_')
+    probe_part = [part for part in base_str_parts if 'probe' in part][0]
+    pid = re.match('probe[A-F]', probe_part).group(0)[-1]
+    
+    return pid
+
+
+def transfer_d2_files(session_base_dir, dest_dir, file_dict):
     
     transfer_dict = get_file_transfer_dict(session_base_dir, dest_dir, file_dict)
     for filename, params in data_files.items():

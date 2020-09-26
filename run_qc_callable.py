@@ -114,13 +114,17 @@ def run_qc(exp_id, save_root):
     ### BUILD UNIT TABLE ####
     probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
     
-    ### Plot basic unit QC ###
-    unit_quality_dir = os.path.join(FIG_SAVE_DIR, 'unit_quality')
+    ### Plot Probe Yield QC ###
+    probe_yield_dir = os.path.join(FIG_SAVE_DIR, 'probe_yield')
     probe_dirs = [paths['probe'+pid] for pid in paths['data_probes']]
-    analysis.plot_unit_quality_hist(probe_dict, unit_quality_dir, prefix=figure_prefix)
-    analysis.plot_unit_distribution_along_probe(probe_dict, unit_quality_dir, prefix=figure_prefix)
-    analysis.plot_all_spike_hist(probe_dict, unit_quality_dir, prefix=figure_prefix+'good')
-    analysis.copy_probe_depth_images(paths, unit_quality_dir, prefix=figure_prefix)
+    analysis.plot_unit_quality_hist(probe_dict, probe_yield_dir, prefix=figure_prefix)
+    analysis.plot_unit_distribution_along_probe(probe_dict, probe_yield_dir, prefix=figure_prefix)
+    analysis.plot_all_spike_hist(probe_dict, probe_yield_dir, prefix=figure_prefix+'good')
+    analysis.copy_probe_depth_images(paths, probe_yield_dir, prefix=figure_prefix)
+    
+    ### Unit Metrics ###
+    unit_metrics_dir = os.path.join(FIG_SAVE_DIR, 'unit_metrics')
+    analysis.plot_unit_metrics(paths, unit_metrics_dir, prefix=figure_prefix)
     
     ### Probe/Sync alignment
     probeSyncDir = os.path.join(FIG_SAVE_DIR, 'probeSyncAlignment')

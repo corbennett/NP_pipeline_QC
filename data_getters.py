@@ -266,6 +266,7 @@ class local_data_getter(data_getter):
     
     def get_image_data(self):
          
+        #GET PROBE DEPTH IMAGES
          for probeID in self.data_dict['data_probes']:
              
              probe_base = self.data_dict['probe'+probeID]

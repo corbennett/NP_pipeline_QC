@@ -13,8 +13,15 @@ import datetime
 #TODO: LOGGING!!! 
 
 rigs_to_check = ['NP1', 'NP0']
-source = r"\\10.128.50.43\sd6.3"
-dest = r"\\10.128.50.43\sd6.3\lims validation"
+#source = r"\\10.128.50.43\sd6.3"
+#dest = r"\\10.128.50.43\sd6.3\lims validation"
+source = r"\\10.128.50.20\sd7"
+dest = os.path.join(source, 'lims_validation')
+
+if not os.path.exists(dest):
+    os.mkdir(dest)
+    
+    
 def get_lims_id_from_session_dir(sdir):
     
     base = os.path.basename(sdir)

@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.patches as mpatches
-import os
+import os, json, shutil
 import analysis
 from numba import njit
 import visual_behavior
@@ -17,10 +17,8 @@ from get_sessions import glob_file
 import ecephys
 from probeSync_qc import get_sync_line_data
 import probeSync_qc as probeSync
-import json
 import cv2
-import shutil
-
+import pandas as pd
 
 probe_color_dict = {'A': 'orange',
                         'B': 'r',
@@ -651,7 +649,7 @@ def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoc
         fig.text(xcoord, 0.97, name, color=c, size='large', ha='center')
         
     
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, 'video_frames.png'))
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'video_frames.png'))
     #plt.tight_layout()
     
 def get_frames_from_epochs(videos_present, sync, epoch_start_times, epoch_end_times, epoch_frame_nums):
@@ -690,7 +688,33 @@ def copy_probe_depth_images(paths, FIG_SAVE_DIR, prefix=''):
             shutil.copyfile(source_path, dest_path)
 
 
-
+def plot_unit_metrics(paths, FIG_SAVE_DIR, prefix=''):
+    cols_to_plot = [('presence_ratio', 'fraction of session'),
+                    ('isi_viol', 'violation rate'),
+                    ('max_drift', 'microns'),
+                    ('snr', 'SNR'),
+                    ('halfwidth', 'ms'),
+                    ('firing_rate', 'Hz'),
+                    ('amplitude', 'uV') ]
+    metrics_keys = [p for p in paths if 'metrics' in p]
+    if len(metrics_keys)>0:
+        
+        for m in metrics_keys:
+            fig, ax = plt.subplots(1, len(cols_to_plot), constrained_layout=True)
+            fig.set_size_inches([16, 6])
+            fig.suptitle(m + ' unit metrics')
+            metrics_file = paths[m]
+            metrics_data = pd.read_csv(metrics_file) 
+            metrics_data = metrics_data.loc[metrics_data['quality']=='good']
+            
+            for ic, (col, units) in enumerate(cols_to_plot):
+                
+                ax[ic].hist(metrics_data[col], bins=20, color='k')
+                ax[ic].set_title(col)
+                ax[ic].set_xlabel(units)
+            
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+m+'_unit_metrics.png'))
+    
 
 def save_json(to_save, save_path):
     
