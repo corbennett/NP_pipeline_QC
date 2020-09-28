@@ -8,7 +8,7 @@ import os, glob
 import json
 import re
 
-def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None):
+def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, day1=True):
     '''Gets ephys sessions from root directory. 
     Takes only the directories in root with the expected format:
         10 digit lims ID, 6 digit mouseID and 8 digit date
@@ -26,8 +26,8 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None):
                                   and validate_session_dir(d))]
     
     for func, criterion in zip([mouseID_filter, start_date_filter, 
-                                end_date_filter, rig_filter],
-                               [mouseID, start_date, end_date, rig]):
+                                end_date_filter, rig_filter, day1_filter],
+                               [mouseID, start_date, end_date, rig, day1]):
         dirs = apply_filter(dirs, func, criterion)
 
     return dirs
@@ -88,6 +88,17 @@ def rig_filter(d, rig):
     d_rig = platform_contents['rig_id']
     
     return all([c in d_rig.upper() for c in rig.upper()])
+
+
+def day1_filter(d, day1):
+    
+    filter_out = True
+    if day1:
+        base = os.path.basename(d)
+        lims_id = re.search('[0-9]{10}', base).group(0)
+        filter_out = lims_id[0] != '2'
+        
+    return filter_out
 
 
 def apply_filter(dirs, filter_func, criterion):

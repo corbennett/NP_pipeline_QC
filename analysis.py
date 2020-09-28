@@ -251,14 +251,13 @@ def vsync_report(vf, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
     save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'vsync_report.json'))
     
     
-def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, 
+def plot_population_change_response(probe_dict, behavior_start_frame, replay_start_frame, 
                                     trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
     
     change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
-    active_change_times = FRAME_APPEAR_TIMES[change_frames]
-    first_passive_frame = behavior_frame_count + mapping_frame_count
-    passive_change_times = FRAME_APPEAR_TIMES[first_passive_frame:][change_frames]
+    active_change_times = FRAME_APPEAR_TIMES[change_frames+behavior_start_frame]
+    passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
     
     lfig, lax = plt.subplots()
     preTime = 0.05
@@ -704,17 +703,44 @@ def plot_unit_metrics(paths, FIG_SAVE_DIR, prefix=''):
             fig.set_size_inches([16, 6])
             fig.suptitle(m + ' unit metrics')
             metrics_file = paths[m]
+            if metrics_file is None:
+                continue
             metrics_data = pd.read_csv(metrics_file) 
             metrics_data = metrics_data.loc[metrics_data['quality']=='good']
             
             for ic, (col, units) in enumerate(cols_to_plot):
-                
-                ax[ic].hist(metrics_data[col], bins=20, color='k')
+                col_data = metrics_data[col].loc[~np.isinf(metrics_data[col])]
+                ax[ic].hist(col_data, bins=20, color='k')
                 ax[ic].set_title(col)
                 ax[ic].set_xlabel(units)
             
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+m+'_unit_metrics.png'))
+
+def plot_opto_responses(probe_dict, opto_pkl, syncDataset, prefix=''):
     
+    opto_stim_table = get_opto_stim_table(syncDataset, opto_pkl)
+    
+    
+
+def get_opto_stim_table(syncDataset, opto_pkl):
+    
+    trial_levels = opto_pkl['opto_levels']
+    trial_conds = opto_pkl['opto_conditions']
+    trial_start_times = syncDataset.get_rising_edges('stim_trial_opto', units='seconds')
+    
+    
+   
+def copy_files(file_keys, paths, FIG_SAVE_DIR, prefix=''):
+    
+    for key in file_keys:
+        source_path = paths[key]
+        if source_path is not None:
+            dest_path = os.path.join(FIG_SAVE_DIR, prefix + os.path.basename(source_path))
+            if not os.path.exists(os.path.dirname(dest_path)):
+                os.mkdir(os.path.dirname(dest_path))
+            
+            shutil.copyfile(source_path, dest_path)
+        
 
 def save_json(to_save, save_path):
     

@@ -6,15 +6,8 @@ Created on Tue Jun  9 14:33:49 2020
 """
 
 from psycopg2 import connect, extras
-#import numpy as np
 import os, glob #, shutil
-#from visual_behavior.visualization.extended_trials.daily import make_daily_figure
-#from visual_behavior.translator.core import create_extended_dataframe
-#from visual_behavior.translator.foraging2 import data_to_change_detection_core
-#import visual_behavior
-#import pandas as pd
-#import probeSync_qc as probeSync
-
+from D1_local_schema import D1_schema as D1_local
 
 class data_getter():
     ''' parent class for data getter, should be able to 
@@ -214,6 +207,7 @@ class lims_data_getter(data_getter):
         
 class local_data_getter(data_getter):
     
+    
     def connect(self, exp_id, base_dir):
         
         if os.path.exists(base_dir):
@@ -267,14 +261,21 @@ class local_data_getter(data_getter):
     def get_image_data(self):
          
         #GET PROBE DEPTH IMAGES
-         for probeID in self.data_dict['data_probes']:
+        for probeID in self.data_dict['data_probes']:
              
-             probe_base = self.data_dict['probe'+probeID]
-             probe_depth_image = glob_file(os.path.join(probe_base, 'probe_depth*.png'))
-             if probe_depth_image is not None:
-                 self.data_dict['probe_depth_'+probeID] = probe_depth_image
+            probe_base = self.data_dict['probe'+probeID]
+            probe_depth_image = glob_file(os.path.join(probe_base, 'probe_depth*.png'))
+            if probe_depth_image is not None:
+                self.data_dict['probe_depth_'+probeID] = probe_depth_image
              
-        
+        #GET OTHER IMAGE FILES
+        image_files = [k for k in D1_local if 'image' in k]
+        for im in image_files:
+            im_info = D1_local[im]
+            im_file = glob_file(os.path.join(self.base_dir, im_info['rel_path']))
+            
+            self.data_dict[im] = im_file
+            
 
 def glob_file(file_path):
     f = glob.glob(file_path)
