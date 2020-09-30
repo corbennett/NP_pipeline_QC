@@ -221,6 +221,7 @@ class local_data_getter(data_getter):
                 'mapping_pkl': ['*mapping*.pkl', '*stim.pkl'],
                 'replay_pkl': '*replay*.pkl',
                 'behavior_pkl': '*behavior*.pkl',
+                'opto_pkl': '*opto*.pkl',
                 'sync_file': '*.sync',
                 'RawEyeTrackingVideo': ['*.eye.avi', '*eye.mp4'],
                 'RawBehaviorTrackingVideo': ['*behavior.avi', '*behavior.mp4'],

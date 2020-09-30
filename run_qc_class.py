@@ -52,6 +52,7 @@ class run_qc():
         self.BEHAVIOR_PKL = self.paths['behavior_pkl']
         self.REPLAY_PKL = self.paths['replay_pkl']
         self.MAPPING_PKL = self.paths['mapping_pkl']
+        self.OPTO_PKL = self.paths['opto_pkl']
 
         for f,s in zip([self.SYNC_FILE, self.BEHAVIOR_PKL, self.REPLAY_PKL, self.MAPPING_PKL], ['sync: ', 'behavior: ', 'replay: ', 'mapping: ']):
             print(s + f)
@@ -61,6 +62,7 @@ class run_qc():
         self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
         self.replay_data = pd.read_pickle(self.REPLAY_PKL)
+        self.opto_data = pd.read_pickle(self.OPTO_PKL)
         
         self.trials = behavior_analysis.get_trials_df(self.behavior_data)
     
@@ -235,4 +237,13 @@ class run_qc():
                                     [self.behavior_end_time, self.mapping_end_time, self.replay_end_time],
                                      epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
 
-    
+    def optotagging(self):
+        ### Plot opto responses along probe ###
+        opto_dir = os.path.join(self.FIG_SAVE_DIR, 'optotagging')
+        if self.probe_dict is None:
+            self._build_unit_table()
+        
+        analysis.plot_opto_responses(self.probe_dict, self.opto_data, self.syncDataset, 
+                                     opto_dir, prefix=self.figure_prefix, opto_sample_rate=10000)
+        
+        
