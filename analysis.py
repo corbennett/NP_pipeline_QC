@@ -72,9 +72,9 @@ def plot_rf(mapping_pkl_data, spikes, first_frame_offset, frameAppearTimes, resp
     rf_trial_start_times = rf_frameTimes[np.array([f[0] for f in np.array(rfStimParams['sweep_frames'])]).astype(np.int)]
 
     #extract trial stim info (xpos, ypos, ori)
-    sweep_table = np.array(rfStimParams['sweep_table'])   #table with rfstim parameters, indexed by sweep order to give stim for each trial
-    sweep_order = np.array(rfStimParams['sweep_order'])   #index of stimuli for sweep_table for each trial
-    
+    sweep_table = np.array(rfStimParams['sweep_table'], dtype=object)   #table with rfstim parameters, indexed by sweep order to give stim for each trial
+    sweep_order = np.array(rfStimParams['sweep_order'], dtype=object).astype(int)  #index of stimuli for sweep_table for each trial
+
     trial_xpos = np.array([pos[0] for pos in sweep_table[sweep_order, 0]])
     trial_ypos = np.array([pos[1] for pos in sweep_table[sweep_order, 0]])
     trial_ori = sweep_table[sweep_order, 3]
