@@ -7,7 +7,7 @@ Created on Wed Aug 12 19:09:46 2020
 
 import get_sessions as gs
 import os
-from run_qc_callable import run_qc
+from run_qc_class import run_qc
 from matplotlib import pyplot as plt
 
 #TODO: LOGGING!!! 
@@ -25,7 +25,7 @@ for ind, s in enumerate(sessions_to_run):
           .format(session_name, ind+1, len(sessions_to_run)))
     
     try:
-        run_qc(s, destination)
+        run_qc(s, destination, modules_to_run='vsync')
     
     except Exception as e:
         failed.append((s, e))

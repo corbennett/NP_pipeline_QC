@@ -16,9 +16,10 @@ class data_getter():
     3) grab probe data
     '''
     
-    def __init__(self, exp_id=None, base_dir=None):
+    def __init__(self, exp_id=None, base_dir=None, cortical_sort=False):
         
         self.data_dict = {}
+        self.cortical_sort = cortical_sort
         self.connect(exp_id, base_dir)
         self.get_exp_data()
         self.get_probe_data()
@@ -119,9 +120,9 @@ class lims_data_getter(data_getter):
     def get_image_data(self):
         '''Get all the images associated with this experiment 
         '''
-        
+    
         IMAGE_QRY = '''
-            SELECT es.id AS es_id, es.name AS es, imt.name AS image_type, es.storage_directory || j.id || '/' || im.jp2 AS image_path
+            SELECT es.id AS es_id, es.name AS es, imt.name AS image_type, im.jp2 AS image_path
             FROM ecephys_sessions es
                 JOIN observatory_associated_data oad ON oad.observatory_record_id = es.id AND oad.observatory_record_type = 'EcephysSession'
                 JOIN images im ON im.id=oad.observatory_file_id AND oad.observatory_file_type = 'Image'
@@ -134,10 +135,19 @@ class lims_data_getter(data_getter):
         self.cursor.execute(IMAGE_QRY.format(self.lims_id))
         image_data = self.cursor.fetchall()
         
+        # FOR NOW JUST ASSUME IMAGES ARE IN THE D1 UPLOAD DIRECTORY
+        # get D1 directory (assume this is where the sync file is)
+        if 'sync_file' not in self.data_dict:
+            print('Must load experiment data before image data')
+            return
+            
+        D1_directory = os.path.dirname(self.data_dict['sync_file'])
+        
         for im in image_data:
             name = im['image_type']
-            path = im['image_path']
-            self.data_dict[name] = convert_lims_path(path)
+            path = os.path.join(D1_directory, im['image_path'])
+            #self.data_dict[name] = convert_lims_path(path)
+            self.data_dict[name] = path
             
         
     def get_probe_data(self):
@@ -251,14 +261,20 @@ class local_data_getter(data_getter):
         
         #get probe dirs
         for probeID in 'ABCDEF':
-            probe_base = glob_file(os.path.join(self.base_dir, '*probe'+probeID+'_sorted'))
+            if self.cortical_sort:
+                probe_base = glob_file(os.path.join(self.base_dir, 'cortical*probe'+probeID+'_sorted'))
+            else:
+                probe_base = glob_file(os.path.join(self.base_dir, '*probe'+probeID+'_sorted'))
             if probe_base is not None:
                 self.data_dict['data_probes'].append(probeID)
                 self.data_dict['probe' + probeID] = probe_base
                 
                 metrics_file = glob_file(os.path.join(probe_base, r'continuous\Neuropix-PXI-100.0\metrics.csv'))
                 self.data_dict['probe' + probeID + '_metrics'] = metrics_file
-    
+                
+                info_json = glob_file(os.path.join(probe_base, '*probe_info*json'))
+                self.data_dict['probe' + probeID + '_info'] = info_json
+
     def get_image_data(self):
          
         #GET PROBE DEPTH IMAGES

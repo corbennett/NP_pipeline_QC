@@ -21,7 +21,11 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, d
                     date format needs to be 'YYYYMMDD'
         end_date: take all dates before or on this
     ''' 
-    in_dir = list_dir(root)
+    if isinstance(root, list):
+        in_dir = concatenate_lists([list_dir(r) for r in root])
+    else:
+        in_dir = list_dir(root)
+        
     dirs = [d for d in in_dir if (os.path.isdir(d) \
                                   and validate_session_dir(d))]
     
@@ -109,7 +113,20 @@ def apply_filter(dirs, filter_func, criterion):
     else:
         dirs = [d for d in dirs if filter_func(d, criterion)]
         return dirs
+
+
+def concatenate_lists(lists):
     
+    cat = []
+    for l in lists:
+        if len(l)==0:
+            continue
+        elif len(l)==1:
+            cat.append(l)
+        else:
+            cat.extend(l)
+    return cat
+
     
 def read_json(file_path):
     

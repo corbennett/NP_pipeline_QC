@@ -19,6 +19,7 @@ from analysis import save_figure
 import pickle
 # sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
+import scipy.signal
 
 
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
@@ -37,7 +38,9 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             rmats = []
             for ind, s in spikes.iterrows():
                 rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES)
-                if rmat.max()>response_thresh:
+                significant = get_significant_rf(rmat)
+                #if rmat.max()>response_thresh:
+                if significant:
                     rfs[p]['peakChan'].append(s['peakChan'])
                     rfs[p]['unitID'].append(s['Unnamed: 0'])
                     rfs[p]['rfmat'].append(rmat)
@@ -47,7 +50,7 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
          
             
             fig = plt.figure(constrained_layout=True, figsize=[6,6])
-            title = p + ' population RF'
+            title = p + ' population RF: {} units'.format(len(rmats))   
             fig.suptitle(title, color='w')
             
             nrows, ncols = 10,10
@@ -85,7 +88,29 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
     
     if return_rfs:
         return rfs
-                    
+
+def get_significant_rf(rfmat, nreps=1000, conv=2):
+    
+    if rfmat.ndim>2:
+        rfmat = np.mean(rfmat, axis=2)
+    
+    conv_mat = np.ones((2,2))
+    rf_conv = scipy.signal.convolve2d(rfmat, conv_mat, 'same')/4
+    
+    shuffled = []
+    rf_shuff = np.copy(rfmat)
+    for rep in np.arange(nreps):
+        flat = rf_shuff.flatten()
+        np.random.shuffle(flat)
+        unflat = flat.reshape([9,9])
+        unflat_conv = scipy.signal.convolve2d(unflat, conv_mat, 'same')/4
+        shuffled.append(unflat_conv)
+    
+    shuff_max = [s.max() for s in shuffled]
+    percentile_95 = np.percentile(shuff_max, 95)
+    
+    return rf_conv.max() > percentile_95
+                  
 
 if __name__ == "__main__":
     

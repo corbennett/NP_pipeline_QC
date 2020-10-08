@@ -123,9 +123,8 @@ def get_sync_line_data(syncDataset, line_label=None, channel=None):
         print('Must specify either line label or channel id')
         return
     
-    sample_freq = syncDataset.meta_data['ni_daq']['counter_output_freq']
-    rising = syncDataset.get_rising_edges(channel)/sample_freq
-    falling = syncDataset.get_falling_edges(channel)/sample_freq
+    rising = syncDataset.get_rising_edges(channel, units='seconds')
+    falling = syncDataset.get_falling_edges(channel, units='seconds')
     
     return rising, falling
 
@@ -340,6 +339,21 @@ def get_stim_starts_ends(sync_dataset, fallback_line=5):
             Sync signal is suspect...'.format(len(stim_ons), len(stim_offs)))
 
     return stim_ons, stim_offs
+
+
+def get_diode_times(sync_dataset, fallback_line=4):
+    
+    lines = sync_dataset.line_labels
+    
+    diode_line = fallback_line
+    for line in lines:
+        if 'photodiode' in line:
+            diode_line = line
+    
+    rising_edges = sync_dataset.get_rising_edges(diode_line, units='seconds')
+    falling_edges = sync_dataset.get_falling_edges(diode_line, units='seconds')
+    
+    return rising_edges, falling_edges
 
 
 def get_lick_times(sync_dataset, fallback_line=31):

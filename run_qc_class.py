@@ -14,15 +14,13 @@ Created on Fri Jul 10 15:42:31 2020
 
 import numpy as np
 import os, glob, shutil
+import json
 import behavior_analysis
 #from visual_behavior.ophys.sync import sync_dataset
 from sync_dataset import Dataset as sync_dataset
 import pandas as pd
-from matplotlib import pyplot as plt
 import analysis
 import probeSync_qc as probeSync
-import scipy.signal
-import cv2
 import data_getters
 from get_RFs_standalone import get_RFs
 import logging 
@@ -30,13 +28,15 @@ import logging
 
 class run_qc():
     
-    def __init__(self, exp_id, save_root, modules_to_run='all'):
+    def __init__(self, exp_id, save_root, modules_to_run='all', cortical_sort=False, probes_to_run='ABCDEF'):
         
         self.modules_to_run = modules_to_run
+        self.errors = []
+        self.cortical_sort = cortical_sort
         
         identifier = exp_id
         if identifier.find('_')>=0:
-            d = data_getters.local_data_getter(base_dir=identifier)
+            d = data_getters.local_data_getter(base_dir=identifier, cortical_sort=cortical_sort)
         else:
             d = data_getters.lims_data_getter(exp_id=identifier)
         
@@ -100,7 +100,11 @@ class run_qc():
         self.mapping_end_frame = self.mapping_start_frame + self.mapping_frame_count - 1
         self.replay_end_frame = self.replay_start_frame + self.replay_frame_count - 1
         
-        MONITOR_LAG = 0.036 #TO DO: don't hardcode this...
+        MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
+        if MONITOR_LAG>0.06:
+            self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
+            MONITOR_LAG = 0.036
+            
         self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG  
         
         self.behavior_start_time, self.mapping_start_time, self.replay_start_time = [self.FRAME_APPEAR_TIMES[f] for f in 
@@ -110,13 +114,15 @@ class run_qc():
         self.probe_dirs = [self.paths['probe'+pid] for pid in self.paths['data_probes']]
         self.probe_dict = None
         self.lfp_dict = None
+        self.metrics_dict = None
+        self.probeinfo_dict = None
         
+        self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
         
     
     def _run_modules(self):
         
-        self.errors = []
         module_list = [func for func in dir(self) if callable(getattr(self, func))]
         for module in module_list:
             if module[0] == '_':
@@ -135,13 +141,34 @@ class run_qc():
           
     def _build_unit_table(self):
         ### BUILD UNIT TABLE ####
-        self.probe_dict = probeSync.build_unit_table(self.paths['data_probes'], self.paths, self.syncDataset)
+        self.probe_dict = probeSync.build_unit_table(self.probes_to_run, self.paths, self.syncDataset)
     
     
     def _build_lfp_dict(self):
         self.lfp_dict = probeSync.build_lfp_dict(self.probe_dirs, self.syncDataset)
 
+
+    def _build_metrics_dict(self):
+        
+        self.metrics_dict = {}
+        for p in self.probes_to_run:
+            key = 'probe'+p+'_metrics'
+            if key in self.paths:
+                metrics_file = self.paths[key]
+                self.metrics_dict[p] = pd.read_csv(metrics_file)
     
+    
+    def _build_probeinfo_dict(self):
+
+        # read probe info json
+        self.probeinfo_dict = {}
+        for p in self.probes_to_run:
+            key = 'probe'+p+'_info'
+            if key in self.paths:
+                with open(self.paths[key], 'r') as file:
+                    self.probeinfo_dict[p]= json.load(file)
+                
+                
     def behavior(self):
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
@@ -149,7 +176,9 @@ class run_qc():
         
         trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
-        
+        analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 
+                                    behavior_plot_dir, prefix=self.figure_prefix)
+    
         
     def vsync(self):
         ### Plot vsync info ###
@@ -158,21 +187,29 @@ class run_qc():
                                       self.behavior_start_frame, self.mapping_start_frame,
                                       self.replay_start_frame, vsync_save_dir, prefix=self.figure_prefix) 
         analysis.plot_vsync_interval_histogram(self.vf, vsync_save_dir, prefix = self.figure_prefix)
-        analysis.vsync_report(self.vf, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
+        analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
+        analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
         
     
     def probe_yield(self):
         ### Plot Probe Yield QC ###
-        if self.probe_dict is None:
-            self._build_unit_table()
+        if self.metrics_dict is None:
+            self._build_metrics_dict()
+        if self.probeinfo_dict is None:
+            self._build_probeinfo_dict()
         
         probe_yield_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_yield')
-        analysis.plot_unit_quality_hist(self.probe_dict, probe_yield_dir, prefix=self.figure_prefix)
-        analysis.plot_unit_distribution_along_probe(self.probe_dict, probe_yield_dir, prefix=self.figure_prefix)
-        analysis.plot_all_spike_hist(self.probe_dict, probe_yield_dir, prefix=self.figure_prefix+'good')
+        analysis.plot_unit_quality_hist(self.metrics_dict, probe_yield_dir, prefix=self.figure_prefix)
+        analysis.plot_unit_distribution_along_probe(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)
         analysis.copy_probe_depth_images(self.paths, probe_yield_dir, prefix=self.figure_prefix)
+        analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
     
     
+    def data_loss(self):
+        ### Look for gaps in data acquisition ###
+        probe_yield_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_yield')
+        analysis.plot_all_spike_hist(self.probe_dict, probe_yield_dir, prefix=self.figure_prefix+'good')
+
     def unit_metrics(self):
         ### Unit Metrics ###
         unit_metrics_dir = os.path.join(self.FIG_SAVE_DIR, 'unit_metrics')
@@ -192,8 +229,10 @@ class run_qc():
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
+        
+        ctx_units_percentile = 40 if not self.cortical_sort else 100
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
-                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), prefix=self.figure_prefix)
+                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, prefix=self.figure_prefix)
     
     
     def change_responses(self):
@@ -201,11 +240,6 @@ class run_qc():
             self._build_unit_table()
         analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, self.trials, 
                                              self.FRAME_APPEAR_TIMES, os.path.join(self.FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=66, prefix=self.figure_prefix)
-    
-    def running_wheel(self):
-        ### Plot running ###
-        analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 
-                                    self.behavior_plot_dir, prefix=self.figure_prefix)
     
     
     def lfp(self, agarChRange=None, num_licks=20, windowBefore=0.5, 
