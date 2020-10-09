@@ -28,7 +28,8 @@ import logging
 
 class run_qc():
     
-    def __init__(self, exp_id, save_root, modules_to_run='all', cortical_sort=False, probes_to_run='ABCDEF'):
+    def __init__(self, exp_id, save_root, modules_to_run='all', 
+                 cortical_sort=False, probes_to_run='ABCDEF'):
         
         self.modules_to_run = modules_to_run
         self.errors = []
