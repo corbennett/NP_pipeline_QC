@@ -28,8 +28,6 @@ for s in sessionsToRun:
     print(command_string)
     subprocess.call(command_string)
     
-    
-
 
 data_directory = r'\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\rf_summary'
 sessions = os.listdir(data_directory)

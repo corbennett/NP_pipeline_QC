@@ -19,6 +19,8 @@ from probeSync_qc import get_sync_line_data
 import probeSync_qc as probeSync
 import cv2
 import pandas as pd
+import plotly
+import plotly.tools as tls
 
 probe_color_dict = {'A': 'orange',
                         'B': 'r',
@@ -193,6 +195,70 @@ def get_trial_by_time(times, trial_start_times, trial_end_times):
     return np.array(trials)
 
 
+def vectorize_edgetimes(on_times, off_times, sampleperiod = 0.001):
+    
+    on_times_samp = np.round(on_times/sampleperiod, 0).astype(int)
+    off_times_samp = np.round(off_times/sampleperiod, 0).astype(int)
+    
+    last_time = np.max([on_times_samp.max(), off_times_samp.max()])
+    vector = np.zeros(int(last_time))
+    times = np.arange(len(vector))*sampleperiod
+    
+    
+    if off_times_samp[0] < on_times_samp[0]:
+        on_times_samp = np.insert(on_times_samp, 0, 0)
+    
+    if on_times[-1]>off_times[-1]:
+        off_times_samp = np.append(off_times_samp, int(last_time))
+    
+    on_intervals = [slice(on, off) for on, off in zip(on_times_samp, off_times_samp)]
+    #off_intervals = [slice(off, on) for on, off in zip(on_times[1:], off_times)]
+    
+    for interval in on_intervals:
+        vector[interval] = 1
+            
+    return vector, times
+
+def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
+    
+    monitor_lag = get_monitor_lag(syncDataset)
+    dioder, diodef = probeSync.get_diode_times(syncDataset)
+    vf = probeSync.get_vsyncs(syncDataset)
+    
+    start_session_diode_vector, dtimes = vectorize_edgetimes(dioder[:10], diodef[:10])
+    
+    fig, ax = plt.subplots(1, 2)
+    fig.set_size_inches([15, 6])
+    fig.suptitle('vsync/diode alignment')
+    ax[0].plot(dtimes, start_session_diode_vector, 'k')
+    ax[0].plot(vf[:500], 0.5*np.ones(500), 'r|', ms=20)
+    ax[0].plot(vf[60], 0.5, 'g|', ms=30)
+    ax[0].set_xlim([vf[0]-1, vf[60]+0.5])
+    ax[0].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
+    ax[0].set_xlabel('Experiment time (s)')
+    
+    ax[1].plot(dtimes, start_session_diode_vector, 'k')
+    ax[1].plot(vf[50:70], 0.5*np.ones(20), 'r|', ms=20)
+    ax[1].plot(vf[60], 0.5, 'g|', ms=30)
+    ax[1].set_xlim([vf[50], vf[70]])
+    ax[1].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
+    ax[1].set_xlabel('Experiment time (s)')
+    
+    ax[1].legend(['diode', 'vf', 'frame 60', 'lag'], markerscale=0.5)
+
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.png'))
+
+
+def get_monitor_lag(syncDataset):
+
+    dioder, diodef = probeSync.get_diode_times(syncDataset)
+    vf = probeSync.get_vsyncs(syncDataset)
+    
+    lag = np.min([np.min(np.abs(d-vf[60])) for d in [diodef, dioder]])
+    
+    return lag
+
+
 def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count, 
                          behavior_start_frame, mapping_start_frame, 
                          replay_start_frame, save_dir, prefix=''):
@@ -224,7 +290,7 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     fig, ax = plt.subplots(constrained_layout=True)
     fig.suptitle('Vsync interval histogram')
     
-    bins = np.arange(0, 0.1, 0.002)*1000
+    bins = np.arange(12, 40, 0.1)
     ax.hist(np.diff(vf)*1000, bins=bins)
     v = ax.axvline(16.667, color='k', linestyle='--')
     ax.set_ylabel('number of frame intervals')
@@ -234,7 +300,9 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
 
 
-def vsync_report(vf, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
+def vsync_report(syncDataset, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
+    
+    vf = probeSync.get_vsyncs(syncDataset)
     
     report = {}
     intervals = np.diff(vf)
@@ -243,22 +311,23 @@ def vsync_report(vf, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
     report['sync_pkl_framecount_match'] = 'TRUE' if len(vf)==total_pkl_frames else 'FALSE'
     report['mean interval'] = intervals.mean()
     report['median interval'] = np.median(intervals)
-    report['std of interval'] = intervals.std()
+    report['std of interval'] = intervals[intervals<1].std()
     
+    report['num dropped frames'] = int(np.sum(intervals>0.025))-2
     report['num intervals 0.1 <= x < 1'] = int(np.sum((intervals<1)&(intervals>=0.1)))
     report['num intervals >= 1 (expected = 2)'] = int(np.sum(intervals>=1))
+    report['monitor lag'] = get_monitor_lag(syncDataset)
     
     save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'vsync_report.json'))
     
     
-def plot_population_change_response(probe_dict, behavior_frame_count, mapping_frame_count, 
+def plot_population_change_response(probe_dict, behavior_start_frame, replay_start_frame, 
                                     trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
     
     change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
-    active_change_times = FRAME_APPEAR_TIMES[change_frames]
-    first_passive_frame = behavior_frame_count + mapping_frame_count
-    passive_change_times = FRAME_APPEAR_TIMES[first_passive_frame:][change_frames]
+    active_change_times = FRAME_APPEAR_TIMES[change_frames+behavior_start_frame]
+    passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
     
     lfig, lax = plt.subplots()
     preTime = 0.05
@@ -347,13 +416,13 @@ def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, p
     #rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
 
 
-def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
+def plot_unit_quality_hist(metrics_dict, FIG_SAVE_DIR, prefix=''):
     
     fig, ax = plt.subplots()
     legend_artist = []
     legend_label = []
-    for ip, probe in enumerate(probe_dict):
-        p = probe_dict[probe]
+    for ip, probe in enumerate(metrics_dict):
+        p = metrics_dict[probe]
         
         labels = np.sort(np.unique(p['quality']))
         count = []
@@ -373,8 +442,8 @@ def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
             bottom = np.cumsum(count)
             
         
-    ax.set_xticks(np.arange(len(probe_dict)))
-    ax.set_xticklabels([p for p in probe_dict])
+    ax.set_xticks(np.arange(len(metrics_dict)))
+    ax.set_xticklabels([p for p in metrics_dict])
 
     ax.legend(legend_artist, legend_label)
     ax.set_xlabel('Probe')
@@ -384,29 +453,51 @@ def plot_unit_quality_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
     #fig.savefig(os.path.join(FIG_SAVE_DIR, 'unit_quality_hist.png'))
 
 
-def plot_unit_distribution_along_probe(probe_dict, FIG_SAVE_DIR, prefix=''):
+def plot_unit_distribution_along_probe(metrics_dict, info_dict, FIG_SAVE_DIR, prefix=''):
     
-    for ip, probe in enumerate(probe_dict):
-        p = probe_dict[probe]
+    for ip, probe in enumerate(metrics_dict):
+        p = metrics_dict[probe]
         good_units = p[p['quality']=='good']
         noise_units = p[p['quality']=='noise']
         
-        fig, ax = plt.subplots()
+        fig, axes = plt.subplots(ncols=1, nrows=2, constrained_layout=True, sharex=True,
+                             gridspec_kw={'width_ratios':[1], 'height_ratios':[1,6]})
         fig.suptitle('Probe {} unit distribution'.format(probe))
         
-        bins = np.arange(0, good_units['peakChan'].max(), 20)
-        goodhist = ax.hist(good_units['peakChan'], bins=bins, color='g')
-        noisehist = ax.hist(noise_units['peakChan'], bins=bins, color='k', alpha=0.8)
-    
-        ax.set_xlabel('peak channel')
-        ax.set_ylabel('unit count')
+        bins = np.arange(0, 384, 20)
+        goodhist = axes[1].hist(good_units['peak_channel'], bins=bins, color='g')
+        noisehist = axes[1].hist(noise_units['peak_channel'], bins=bins, color='k', alpha=0.8)
         
-        ax.legend([goodhist[2][0], noisehist[2][0]], ['good', 'noise'])
+        mask = np.array(info_dict[probe]['mask']).astype(int)
+        axes[0].plot(np.arange(384), mask, 'k')
+        axes[0].legend(['mask'])
+        axes[0].axis('off')
+        
+        axes[1].set_xlabel('peak channel')
+        axes[1].set_ylabel('unit count')
+        
+        axes[1].legend([goodhist[2][0], noisehist[2][0]], ['good', 'noise'])
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_unit_distribution.png'.format(probe)))
         #fig.savefig(os.path.join(FIG_SAVE_DIR, 'Probe_{}_unit_distribution.png'.format(probe)))
+
+
+def probe_yield_report(metrics_dict, info_dict, FIG_SAVE_DIR, prefix=''):
     
+    report = {p:{} for p in metrics_dict}
+    for probe in metrics_dict:
+        p = metrics_dict[probe]
+        report[probe]['num_good_units'] = int(np.sum(p['quality']=='good'))
+        report[probe]['num_noise_units'] = int(np.sum(p['quality']=='noise'))
+        
+        info = info_dict[probe]
+        report[probe]['surface_channel'] = info['surface_channel']
+        report[probe]['air_channel'] = info['air_channel']
+        report[probe]['num_masked_channels'] = int(np.sum(info['mask']))
   
+    save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'probe_yield_report.json'))
+    
+
 def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
     
     flatten = lambda l: [item[0] for sublist in l for item in sublist]
@@ -704,17 +795,153 @@ def plot_unit_metrics(paths, FIG_SAVE_DIR, prefix=''):
             fig.set_size_inches([16, 6])
             fig.suptitle(m + ' unit metrics')
             metrics_file = paths[m]
+            if metrics_file is None:
+                continue
             metrics_data = pd.read_csv(metrics_file) 
             metrics_data = metrics_data.loc[metrics_data['quality']=='good']
             
             for ic, (col, units) in enumerate(cols_to_plot):
-                
-                ax[ic].hist(metrics_data[col], bins=20, color='k')
+                col_data = metrics_data[col].loc[~np.isinf(metrics_data[col])]
+                ax[ic].hist(col_data, bins=20, color='k')
                 ax[ic].set_title(col)
                 ax[ic].set_xlabel(units)
             
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+m+'_unit_metrics.png'))
+
+def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix='', opto_sample_rate=10000):
     
+    opto_stim_table = get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=opto_sample_rate)
+    levels = np.unique(opto_stim_table['trial_levels'])
+    conds = np.unique(opto_stim_table['trial_conditions'])
+    
+    trial_start_times = opto_stim_table['trial_start_times']
+    
+    for probe in probe_dict:
+        u_df = probe_dict[probe]
+        good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+        spikes = good_units['times']
+        peakChans = good_units['peak_channel'].values
+        unit_shank_order = np.argsort(peakChans)
+        
+        fig = plt.figure(constrained_layout=True, facecolor='w')
+        fig.set_size_inches([18,10])
+        fig.suptitle('Probe {} opto responses'.format(probe))
+        gs = gridspec.GridSpec(levels.size*2 + 1, conds.size*10+1, figure=fig)
+        #gs = gridspec.GridSpec(levels.size*2 + 1, conds.size, figure=fig)
+        color_axes = []
+        ims = []
+        for ic, cond in enumerate(conds):
+            this_waveform = opto_pkl['opto_waveforms'][cond]
+            ax_wave = fig.add_subplot(gs[0, ic*10:(ic+1)*10])
+            ax_wave.plot(np.arange(this_waveform.size)/opto_sample_rate, this_waveform)
+            ax_wave.set_xlim([-0.1, 1.1])
+            ax_wave.set_xticks(np.arange(0, 1.1, 0.2))
+            ax_wave.tick_params(
+                axis='x',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom=False,      # ticks along the bottom edge are off
+                top=False,         # ticks along the top edge are off
+                labelbottom=False)
+            ax_wave.spines['top'].set_visible(False)
+            ax_wave.spines['right'].set_visible(False)
+            
+            if ic==1:
+                ax_wave.set_yticks([])
+                ax_wave.spines['left'].set_visible(False)
+            
+            for il, level in enumerate(levels):
+                
+                trial_inds = (opto_stim_table['trial_levels']==level) & (opto_stim_table['trial_conditions']==cond)
+                trial_starts = trial_start_times[trial_inds]
+                psths = np.array([makePSTH_numba(s.flatten(), trial_starts-0.1, 1.2, 
+                                        binSize=0.001, convolution_kernel=0.05, avg=True) for s in spikes])
+        
+                #bin_times = psths[0, 1, :]
+                psths = psths[unit_shank_order, 0, :].squeeze()
+                psths_baseline_sub = np.array([p-np.mean(p[:100]) for p in psths])   
+                ax = fig.add_subplot(gs[2*il+1:2*il+3, ic*10:(ic+1)*10])
+                #ax = fig.add_subplot(gs[2*il+1:2*il+3, ic])
+                im = ax.imshow(psths_baseline_sub, origin='lower', interpolation='none')
+                ax.set_title('Level: {}'.format(level))
+                color_axes.append(ax)
+                ims.append(im)
+                #plt.colorbar(im)
+                if il==len(levels)-1:
+                    ax.set_xticks(np.arange(100, 1200, 200))
+                    ax.set_xticklabels(np.arange(0, 1100, 200))
+                    ax.set_xlabel('Time from LED onset (ms)')
+                    if ic==0:
+                        ax.set_ylabel('Unit # sorted by depth')
+                    
+                else:
+                    ax.set_xticks([])
+                
+                if ic==1:
+                    ax.set_yticks([])
+        
+        min_clim_val = np.min([im.get_clim()[0] for im in ims])
+        max_clim_val = np.max([im.get_clim()[1] for im in ims])
+        
+        for im in ims:
+            im.set_clim([min_clim_val, max_clim_val])    
+            
+        xs, ys = np.meshgrid(np.arange(2), np.arange(min_clim_val, max_clim_val))
+        ax_colorbar = fig.add_subplot(gs[-2:, conds.size*10:])
+        ax_colorbar.imshow(ys, origin='lower', clim=[min_clim_val, max_clim_val])
+        ax_colorbar.set_yticks([0, np.round(max_clim_val - min_clim_val)])
+        ax_colorbar.set_yticklabels(np.round([min_clim_val, max_clim_val], 2))
+        
+        #ax_colorbar.set_aspect(2)
+        ax_colorbar.set_ylabel('spikes relative to baseline')
+        #ax_colorbar.yaxis.set_label_position('right')
+        ax_colorbar.tick_params(
+            axis='x',          # changes apply to the x-axis
+            which='both',      # both major and minor ticks are affected
+            bottom=False,      # ticks along the bottom edge are off
+            top=False,         # ticks along the top edge are off
+            labelbottom=False)
+        ax_colorbar.tick_params(
+            axis='y',          # changes apply to the x-axis
+            which='both',      # both major and minor ticks are affected
+            left=False,      # ticks along the bottom edge are off
+            right=True,
+            labelright=True,
+            labelleft=False)
+        
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.png'))
+
+
+def get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=10000):
+    
+    trial_levels = opto_pkl['opto_levels']
+    trial_conds = opto_pkl['opto_conditions']
+    trial_start_times = syncDataset.get_rising_edges('stim_trial_opto', units='seconds')
+    
+    waveforms = opto_pkl['opto_waveforms']
+    trial_waveform_durations = [waveforms[cond].size/opto_sample_rate for cond in trial_conds]
+    
+    trial_end_times = trial_start_times + trial_waveform_durations
+    
+    trial_dict = {
+            'trial_levels': trial_levels,
+            'trial_conditions': trial_conds,
+            'trial_start_times': trial_start_times,
+            'trial_end_times': trial_end_times}
+    
+    return trial_dict
+    
+   
+def copy_files(file_keys, paths, FIG_SAVE_DIR, prefix=''):
+    
+    for key in file_keys:
+        source_path = paths[key]
+        if source_path is not None:
+            dest_path = os.path.join(FIG_SAVE_DIR, prefix + os.path.basename(source_path))
+            if not os.path.exists(os.path.dirname(dest_path)):
+                os.mkdir(os.path.dirname(dest_path))
+            
+            shutil.copyfile(source_path, dest_path)
+        
 
 def save_json(to_save, save_path):
     
@@ -733,8 +960,14 @@ def save_figure(fig, save_path):
         os.mkdir(save_dir)
     
     fig.savefig(save_path)
-    
 
+
+def save_as_plotly_json(fig, save_path):
+    
+    plotly_fig = tls.mpl_to_plotly(fig)    
+    plotly_fig.write_json(save_path)
+    
+    
 def read_json(path):
     
     with open(path, 'r') as f:

@@ -138,7 +138,7 @@ def check_schema(schema, paths):
         (meets_size_criterion, size, criterion) = validate_schema_entry_size(schema, key, paths)
         
         validation_dict[key] = {
-                'exists': validate_schema_entry_existence(paths, key),
+                'exists': validate_schema_entry_existence(schema, key, paths),
                 'file_size': size,
                 'min_expected_size': criterion,
                 'meets_size_criterion': meets_size_criterion}   
@@ -171,15 +171,15 @@ def upload_summary(validator):
     return report
     
 
-def validate_schema_entry_existence(paths, entry):
+def validate_schema_entry_existence(schema, entry, paths):
     '''Check that particular file in schema exists in LIMS session data
     '''
     if entry not in paths:
         return False
     elif paths[entry] is None:
         return False
-#    elif not os.path.exists(paths[entry]):
-#        return False
+    elif schema[entry]['minimum_size'] is not None and isinstance(paths[entry], str):
+        return os.path.exists(paths[entry])
     else:
         return True
                     

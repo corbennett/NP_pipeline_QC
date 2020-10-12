@@ -8,7 +8,7 @@ import os, glob
 import json
 import re
 
-def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None):
+def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, day1=True):
     '''Gets ephys sessions from root directory. 
     Takes only the directories in root with the expected format:
         10 digit lims ID, 6 digit mouseID and 8 digit date
@@ -21,13 +21,17 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None):
                     date format needs to be 'YYYYMMDD'
         end_date: take all dates before or on this
     ''' 
-    in_dir = list_dir(root)
+    if isinstance(root, list):
+        in_dir = concatenate_lists([list_dir(r) for r in root])
+    else:
+        in_dir = list_dir(root)
+        
     dirs = [d for d in in_dir if (os.path.isdir(d) \
                                   and validate_session_dir(d))]
     
     for func, criterion in zip([mouseID_filter, start_date_filter, 
-                                end_date_filter, rig_filter],
-                               [mouseID, start_date, end_date, rig]):
+                                end_date_filter, rig_filter, day1_filter],
+                               [mouseID, start_date, end_date, rig, day1]):
         dirs = apply_filter(dirs, func, criterion)
 
     return dirs
@@ -90,6 +94,17 @@ def rig_filter(d, rig):
     return all([c in d_rig.upper() for c in rig.upper()])
 
 
+def day1_filter(d, day1):
+    
+    filter_out = True
+    if day1:
+        base = os.path.basename(d)
+        lims_id = re.search('[0-9]{10}', base).group(0)
+        filter_out = lims_id[0] != '2'
+        
+    return filter_out
+
+
 def apply_filter(dirs, filter_func, criterion):
     
     if criterion is None:
@@ -98,7 +113,20 @@ def apply_filter(dirs, filter_func, criterion):
     else:
         dirs = [d for d in dirs if filter_func(d, criterion)]
         return dirs
+
+
+def concatenate_lists(lists):
     
+    cat = []
+    for l in lists:
+        if len(l)==0:
+            continue
+        elif len(l)==1:
+            cat.append(l)
+        else:
+            cat.extend(l)
+    return cat
+
     
 def read_json(file_path):
     

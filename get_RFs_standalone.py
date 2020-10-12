@@ -19,13 +19,15 @@ from analysis import save_figure
 import pickle
 # sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
+import scipy.signal
 
 
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
-            FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, response_thresh=20, prefix=''): 
+            FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, 
+            response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix=''): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
-    rfs = {p:{k:[] for k in ['peakChan', 'unitID', 'rfmat']} for p in probe_dict}
+    rfs = {p:{k:[] for k in ['peak_channel', 'unitID', 'rfmat']} for p in probe_dict}
     for p in probe_dict:
         try:
             print(f'########## Getting RFs for probe {p} ###########')
@@ -37,8 +39,10 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             rmats = []
             for ind, s in spikes.iterrows():
                 rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES)
-                if rmat.max()>response_thresh:
-                    rfs[p]['peakChan'].append(s['peakChan'])
+                significant = get_significant_rf(rmat)
+                #if rmat.max()>response_thresh:
+                if significant:
+                    rfs[p]['peak_channel'].append(s['peak_channel'])
                     rfs[p]['unitID'].append(s['Unnamed: 0'])
                     rfs[p]['rfmat'].append(rmat)
                     rmats.append(rmat/rmat.max())
@@ -46,16 +50,16 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             rmats_normed_mean = np.nanmean(rmats, axis=0)
          
             
-            fig = plt.figure(constrained_layout=True, figsize=[6,6])
-            title = p + ' population RF'
-            fig.suptitle(title, color='w')
+            rfig = plt.figure(constrained_layout=True, figsize=[6,6])
+            title = p + ' population RF: {} units'.format(len(rmats))   
+            rfig.suptitle(title, color='w')
             
             nrows, ncols = 10,10
-            gs = gridspec.GridSpec(ncols=ncols, nrows=nrows, figure=fig)
+            gs = gridspec.GridSpec(ncols=ncols, nrows=nrows, figure=rfig)
             
-            ax1 = fig.add_subplot(gs[0:nrows-1, 0:ncols-1])
-            ax2 = fig.add_subplot(gs[0:nrows-1, ncols-1])
-            ax3 = fig.add_subplot(gs[nrows-1, 0:ncols-1])
+            ax1 = rfig.add_subplot(gs[0:nrows-1, 0:ncols-1])
+            ax2 = rfig.add_subplot(gs[0:nrows-1, ncols-1])
+            ax3 = rfig.add_subplot(gs[nrows-1, 0:ncols-1])
             
             ax1.imshow(np.mean(rmats_normed_mean, axis=2), origin='lower')
             ax1.set_xticks([], minor=[])
@@ -75,17 +79,95 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             ax2.yaxis.set_label_position("right")
             ax2.set_ylabel('Elevation', rotation=270)
             
-            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png') )
-            #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+            save_path = os.path.join(FIG_SAVE_DIR, prefix + p + ' population RF.png')
+            print(save_path)
+            save_figure(rfig, save_path)
+            #rfig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
             
         
         except Exception as E:
             logging.error(f'{p} failed: {E}')
             print(E)
-    
+        
+        
+    if tile_rfs:
+        print('tiling')
+        try:
+            plot_tiled_rfs(rfs, FIG_SAVE_DIR, chan_bin, max_rows, max_cols, prefix)
+        except Exception as E:
+            logging.error('Failed to tile rfs: {}'.format(E))
+                
     if return_rfs:
         return rfs
-                    
+
+
+def plot_tiled_rfs(rfdict, FIG_SAVE_DIR, chan_bin = 8, max_rows=20, max_cols=20, prefix=''):
+    
+    for p in rfdict:
+        
+        peakchans = rfdict[p]['peak_channel']
+        rfs = np.array(rfdict[p]['rfmat'])
+        
+        lowest_chan = np.min(peakchans)
+        highest_chan = np.max(peakchans)
+        
+        num_bins = (highest_chan - lowest_chan)/chan_bin
+        if num_bins>max_cols:
+            chan_bin = int(np.ceil((highest_chan-lowest_chan)/max_cols))
+            
+        chan_bins = np.arange(lowest_chan, highest_chan+chan_bin, chan_bin)
+        rf_bins = np.digitize(peakchans, chan_bins)-1
+        
+        highest_bin_count = np.max([np.sum(rf_bins==b) for b in np.unique(rf_bins)])
+        nrows = np.min([len(chan_bins), max_rows])
+        ncols = np.min([highest_bin_count, max_rows])
+        
+        fig, axes = plt.subplots(nrows, ncols, figsize=[ncols, nrows])
+        title = p + '_RFs_by_depth'   
+        fig.suptitle(title, color='w')
+        for ax in axes.flat:
+            ax.set_visible(False)
+        
+        for ib, b in enumerate(np.unique(rf_bins)):
+            b_rfs = rfs[rf_bins==b]
+            if len(b_rfs)>ncols:
+                b_rfs = b_rfs[:ncols]
+            for ir, rr in enumerate(b_rfs):
+                rrmean = np.mean(rr, axis=2)
+                ax = axes[nrows - 1 - ib][ir]
+                ax.set_visible(True)
+                ax.tick_params(top=False, bottom=False, left=False, right=False, labelleft=False, labelbottom=False)
+                ax.imshow(rrmean, origin='lower')
+                if ir==0:
+                    ax.tick_params(labelleft=True)
+                    ax.set_ylabel(chan_bins[b], rotation=0)
+                    ax.set_yticklabels([])
+
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png'))
+
+    
+def get_significant_rf(rfmat, nreps=1000, conv=2):
+    
+    if rfmat.ndim>2:
+        rfmat = np.mean(rfmat, axis=2)
+    
+    conv_mat = np.ones((2,2))
+    rf_conv = scipy.signal.convolve2d(rfmat, conv_mat, 'same')/4
+    
+    shuffled = []
+    rf_shuff = np.copy(rfmat)
+    for rep in np.arange(nreps):
+        flat = rf_shuff.flatten()
+        np.random.shuffle(flat)
+        unflat = flat.reshape([9,9])
+        unflat_conv = scipy.signal.convolve2d(unflat, conv_mat, 'same')/4
+        shuffled.append(unflat_conv)
+    
+    shuff_max = [s.max() for s in shuffled]
+    percentile_95 = np.percentile(shuff_max, 95)
+    
+    return rf_conv.max() > percentile_95
+                  
 
 if __name__ == "__main__":
     
