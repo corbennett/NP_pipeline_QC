@@ -830,12 +830,14 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
         #gs = gridspec.GridSpec(levels.size*2 + 1, conds.size, figure=fig)
         color_axes = []
         ims = []
+        cond_trial_duration = [0.4, 1.2]
         for ic, cond in enumerate(conds):
             this_waveform = opto_pkl['opto_waveforms'][cond]
+            plot_duration = cond_trial_duration[ic]
             ax_wave = fig.add_subplot(gs[0, ic*10:(ic+1)*10])
             ax_wave.plot(np.arange(this_waveform.size)/opto_sample_rate, this_waveform)
-            ax_wave.set_xlim([-0.1, 1.1])
-            ax_wave.set_xticks(np.arange(0, 1.1, 0.2))
+            ax_wave.set_xlim([-0.1, plot_duration-0.1])
+            ax_wave.set_xticks(np.linspace(0, plot_duration-0.1, 3))
             ax_wave.tick_params(
                 axis='x',          # changes apply to the x-axis
                 which='both',      # both major and minor ticks are affected
@@ -853,22 +855,21 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
                 
                 trial_inds = (opto_stim_table['trial_levels']==level) & (opto_stim_table['trial_conditions']==cond)
                 trial_starts = trial_start_times[trial_inds]
-                psths = np.array([makePSTH_numba(s.flatten(), trial_starts-0.1, 1.2, 
-                                        binSize=0.001, convolution_kernel=0.05, avg=True) for s in spikes])
+                psths = np.array([makePSTH_numba(s.flatten(), trial_starts-0.1, plot_duration, 
+                                        binSize=0.001, convolution_kernel=0.005, avg=True) for s in spikes])
         
                 #bin_times = psths[0, 1, :]
                 psths = psths[unit_shank_order, 0, :].squeeze()
                 psths_baseline_sub = np.array([p-np.mean(p[:100]) for p in psths])   
                 ax = fig.add_subplot(gs[2*il+1:2*il+3, ic*10:(ic+1)*10])
-                #ax = fig.add_subplot(gs[2*il+1:2*il+3, ic])
-                im = ax.imshow(psths_baseline_sub, origin='lower', interpolation='none')
+                im = ax.imshow(psths_baseline_sub, origin='lower', interpolation='none', aspect='auto')
                 ax.set_title('Level: {}'.format(level))
                 color_axes.append(ax)
                 ims.append(im)
                 #plt.colorbar(im)
                 if il==len(levels)-1:
-                    ax.set_xticks(np.arange(100, 1200, 200))
-                    ax.set_xticklabels(np.arange(0, 1100, 200))
+                    ax.set_xticks(np.linspace(100, 1000*plot_duration, 3))
+                    ax.set_xticklabels(np.linspace(0, 1000*plot_duration-100, 3))
                     ax.set_xlabel('Time from LED onset (ms)')
                     if ic==0:
                         ax.set_ylabel('Unit # sorted by depth')
@@ -879,8 +880,11 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
                 if ic==1:
                     ax.set_yticks([])
         
-        min_clim_val = np.min([im.get_clim()[0] for im in ims])
-        max_clim_val = np.max([im.get_clim()[1] for im in ims])
+#        min_clim_val = np.min([im.get_clim()[0] for im in ims])
+#        max_clim_val = np.max([im.get_clim()[1] for im in ims])
+        
+        min_clim_val = -10
+        max_clim_val = 20
         
         for im in ims:
             im.set_clim([min_clim_val, max_clim_val])    
