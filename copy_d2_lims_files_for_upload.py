@@ -77,7 +77,10 @@ def transfer_session(session_base_dir, probes_to_run = 'ABCDEF'):
     for pd in probe_dirs:   
         pid = get_probe_id_from_dir(pd)
         if pid in probes_to_run:
+            file_dict = validate_d2_files(pd)
+            print(pd)
             p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
+            print(p_dest_dir)
             transfer_d2_files(pd, p_dest_dir, file_dict)
     
 
