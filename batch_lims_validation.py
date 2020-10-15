@@ -47,6 +47,7 @@ for rig in rigs_to_check:
     D2_to_run = {}
     D1_to_check = {}
     D2_to_check = {}
+    complete = {}
     for session in sessions_to_run:
         
         lims_id = get_lims_id_from_session_dir(session)  
@@ -67,12 +68,16 @@ for rig in rigs_to_check:
            
         status[session_name] = report
         
+        if (report['D1_upload_summary']['upload_exists'] and report['D1_upload_summary']['pass']
+            and report['D2_upload_summary']['upload_exists'] and report['D2_upload_summary']['pass']):
+            complete[session] = 'upload complete!'
     
     overall_summary = {
                 'D1_to_run':D1_to_run,
                 'D2_to_run':D2_to_run,
                 'D1_to_check': D1_to_check,
                 'D2_to_check': D2_to_check,
+                'complete': complete,
                 'session_details':status}   
     now = datetime.datetime.now()
     now_string = now.strftime('%Y%m%d%H%M%S')
