@@ -12,7 +12,7 @@ import json
 
 #source_dir = r"\\10.128.50.43\sd6.3\1047969464_509808_20200902"
 
-rig_limsdirectory_dict = {'NP.1': r'\\W10dt05501\e', 'NP.0': r'\\W10dt05501\e'} # for now just use the NP1 directory'NP.0': r'\\W10DT05515\e'}
+rig_limsdirectory_dict = {'NP.1': r'\\W10dt05501\e', 'NP.0': r'\\W10dt05515\e'} # for now just use the NP1 directory'NP.0': r'\\W10DT05515\e'}
 data_file_params = namedtuple('data_file_params',['relpath','upload','sorting_step'])
 
 relpaths = {
@@ -104,7 +104,7 @@ def transfer_d2_files(session_base_dir, dest_dir, file_dict):
         
         real_filename = os.path.basename(info['source'])
         
-        command_string = "robocopy "+ source_dir +" " + dest_dir + " " + real_filename + r" /e /xc /xn /xo"
+        command_string = "robocopy "+ source_dir +" " + dest_dir + " " + real_filename + r" /xc /xn /xo"
         print(command_string)
         P = subprocess.call(command_string)
         print('Copied {} with return code {}'.format(real_filename, P))
