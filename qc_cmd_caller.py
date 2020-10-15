@@ -16,7 +16,7 @@ def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
     session_name = os.path.basename(session)
     print('\nRunning QC for session {} \n'
           .format(session_name))
-    print('Saveing to {}\n'.format(destination))
+    print('Saving to {}\n'.format(destination))
     
     r=run_qc(session, destination, 
              probes_to_run=probes_to_run, cortical_sort=cortical_sort)

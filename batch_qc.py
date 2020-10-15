@@ -12,12 +12,26 @@ from matplotlib import pyplot as plt
 
 #TODO: LOGGING!!! 
 
-source = r"\\10.128.50.43\sd6.3"
-#source = r"\\10.128.50.20\sd7"
-sessions_to_run = gs.get_sessions(source, mouseID='!366122', start_date='20200601', end_date='20200922')
+sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7"]
+sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
+just_run_new_sessions = True
 
+
+def find_new_sessions_to_run(sessions_to_run, destination):
+    all_session_ids = [os.path.split(s)[-1] for s in sessions_to_run]
+    
+    dest_sessions = gs.get_sessions(destination)
+    dest_session_ids = [os.path.split(s)[-1] for s in dest_sessions]
+    
+    return [sessions_to_run[i] for i, d in enumerate(all_session_ids) if d not in dest_session_ids]
+
+if just_run_new_sessions:
+    sessions_to_run = find_new_sessions_to_run(sessions_to_run, destination)
+
+ 
 failed = []
+session_errors = {}
 for ind, s in enumerate(sessions_to_run):
     
     session_name = os.path.basename(s)
@@ -25,7 +39,8 @@ for ind, s in enumerate(sessions_to_run):
           .format(session_name, ind+1, len(sessions_to_run)))
     
     try:
-        run_qc(s, destination, modules_to_run='vsync')
+        r=run_qc(s, destination)
+        session_errors[s] = r.errors
     
     except Exception as e:
         failed.append((s, e))
@@ -33,6 +48,14 @@ for ind, s in enumerate(sessions_to_run):
               .format(session_name, e))
     plt.close('all')
         
+
+
+
+
+
+
+
+
 failed_sessions = [   
     '\\\\10.128.50.43\\sd6.3\\1028043324_498757_20200604',
      '\\\\10.128.50.43\\sd6.3\\1028225380_498757_20200605',

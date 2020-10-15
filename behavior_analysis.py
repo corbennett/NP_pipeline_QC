@@ -8,7 +8,8 @@ Created on Fri Jul 10 15:48:43 2020
 from visual_behavior.visualization.extended_trials.daily import make_daily_figure
 from visual_behavior.translator.core import create_extended_dataframe
 from visual_behavior.translator.foraging2 import data_to_change_detection_core
-from visual_behavior.ophys.sync import sync_dataset
+#from visual_behavior.ophys.sync import sync_dataset
+from sync_dataset import Dataset as sync_dataset
 from visual_behavior.change_detection.trials.session_metrics import trial_count_by_trial_type
 import os
 import numpy as np
