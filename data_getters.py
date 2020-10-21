@@ -122,12 +122,11 @@ class lims_data_getter(data_getter):
         '''
     
         IMAGE_QRY = '''
-            SELECT es.id AS es_id, es.name AS es, imt.name AS image_type, im.jp2 AS image_path
+            SELECT es.id AS es_id, es.name AS es, imt.name AS image_type, es.storage_directory || im.jp2 AS image_path
             FROM ecephys_sessions es
                 JOIN observatory_associated_data oad ON oad.observatory_record_id = es.id AND oad.observatory_record_type = 'EcephysSession'
                 JOIN images im ON im.id=oad.observatory_file_id AND oad.observatory_file_type = 'Image'
                 JOIN image_types imt ON imt.id=im.image_type_id
-                JOIN jobs j ON j.enqueued_object_id=es.id AND j.archived = 'f' AND j.job_queue_id = (SELECT id FROM job_queues WHERE name = 'ECEPHYS_SESSION_UPLOAD_QUEUE')
             WHERE es.id = {}
             ORDER BY es.id, imt.name;
             '''
@@ -137,15 +136,10 @@ class lims_data_getter(data_getter):
         
         # FOR NOW JUST ASSUME IMAGES ARE IN THE D1 UPLOAD DIRECTORY
         # get D1 directory (assume this is where the sync file is)
-        if 'sync_file' not in self.data_dict:
-            print('Must load experiment data before image data')
-            return
-            
-        D1_directory = os.path.dirname(self.data_dict['sync_file'])
-        
+                
         for im in image_data:
             name = im['image_type']
-            path = os.path.join(D1_directory, im['image_path'])
+            path = convert_lims_path(im['image_path'])
             #self.data_dict[name] = convert_lims_path(path)
             self.data_dict[name] = path
             

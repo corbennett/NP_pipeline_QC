@@ -21,6 +21,7 @@ import cv2
 import pandas as pd
 import plotly
 import plotly.tools as tls
+import scipy.signal
 
 probe_color_dict = {'A': 'orange',
                         'B': 'r',
@@ -105,7 +106,34 @@ def plot_psth_change_flashes(change_times, spikes, preTime = 0.05, postTime = 0.
     return sdf, t
 
 
-def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, windowBefore=0.5, windowAfter=0.5, min_inter_lick_time = 0.5, behavior_duration=3600): 
+def filterTrace(trace, highcutoff=0.2, sampleFreq=2500):
+    
+    to_filter = np.copy(trace.T)
+    #highFreqCutoff = 0.2 #frequency below which the signal will get attenuated
+    b,a = scipy.signal.butter(4, highcutoff/(sampleFreq/2.), btype='high') #I made it a fourth order filter, not actually sure what the best way to determine this is...
+    
+    for ic, channel in enumerate(to_filter):
+        to_filter[ic] = scipy.signal.filtfilt(b,a,channel)
+        
+    return to_filter.T
+
+
+def processLFP(lfp_array, baseline_samps = None, agarChRange=None):
+    
+    lfp = np.copy(lfp_array)
+#    print('min {}  max {}  range{}'.format(lfp.min()*0.195, 
+#          lfp.max()*0.195, 0.195*(lfp.max()-lfp.min())))
+    if baseline_samps is not None:
+        lfp = lfp - np.median(lfp[:baseline_samps], axis=0)[None, :]
+    if agarChRange is not None:
+        agar = np.median(lfp[:,agarChRange[0]:agarChRange[1]],axis=1)
+        lfp = lfp-agar[:,None]
+        
+    return lfp
+
+
+def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, 
+                     windowBefore=1, windowAfter=1, min_inter_lick_time = 0.5, behavior_duration=3600): 
     
     first_lick_times = lick_times[lick_times>lfp_time[0]+windowBefore]
     first_lick_times = first_lick_times[:np.min([len(first_lick_times), num_licks])]
@@ -114,49 +142,62 @@ def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20, 
     samplesBefore = int(round(windowBefore * probeSampleRate))
     samplesAfter = int(round(windowAfter * probeSampleRate))
     
-    last_lick_ind = np.where(lfp_time<=first_lick_times[-1])[0][-1]
-    lfp = lfp[:last_lick_ind+samplesAfter+1]
-    lfp = lfp - np.mean(lfp, axis=0)[None, :]    
+    #last_lick_ind = np.where(lfp_time<=first_lick_times[-1])[0][-1]
+    #lfp = lfp[:last_lick_ind+samplesAfter+1]
+    #lfp = lfp - np.mean(lfp, axis=0)[None, :]    
 
-    if agarChRange is not None:
-        agar = np.median(lfp[:,agarChRange[0]:agarChRange[1]],axis=1)
-        lfp = lfp-agar[:,None]
+#    if agarChRange is not None:
+#        agar = np.median(lfp[:,agarChRange[0]:agarChRange[1]],axis=1)
+#        lfp = lfp-agar[:,None]
     
     lickTriggeredAv = np.full([first_lick_times.size, samplesBefore+samplesAfter, lfp.shape[1]], np.nan)
+    filt_lickTriggeredAv = np.full([first_lick_times.size, samplesBefore+samplesAfter, lfp.shape[1]], np.nan)
     lick_inds = np.searchsorted(lfp_time, first_lick_times)
     for il, li in enumerate(lick_inds):
-       lickTriggeredAv[il, :, :] = lfp[li-samplesBefore:li+samplesAfter] 
+        ll = processLFP(lfp[li-samplesBefore:li+samplesAfter], baseline_samps = samplesBefore, agarChRange=agarChRange)
+        lickTriggeredAv[il, :, :] = ll 
+        filt_lickTriggeredAv[il, :, :] = filterTrace(ll, highcutoff=1)
 
-
+    
     m = np.nanmean(lickTriggeredAv, axis=0)*0.195  #convert to uV
+    m_filt = np.nanmean(filt_lickTriggeredAv, axis=0)*0.195
     mtime = np.linspace(-windowBefore, windowAfter, m.size)  
-    return m, mtime, first_lick_times
+    return m, m_filt, mtime, first_lick_times
 
 
 def plot_lick_triggered_LFP(lfp_dict, lick_times, FIG_SAVE_DIR, prefix='', 
-                            agarChRange=None, num_licks=20, windowBefore=0.5, 
+                            agarChRange=None, num_licks=20, windowBefore=1, 
                             windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
     
     for p in lfp_dict:
 
         plfp = lfp_dict[p]['lfp']
-        lta, ltime, first_lick_times = analysis.lickTriggeredLFP(lick_times, plfp, lfp_dict[p]['time'], 
+        lta, lta_filt, ltime, first_lick_times = analysis.lickTriggeredLFP(lick_times, plfp, lfp_dict[p]['time'], 
                                                agarChRange=[325, 350], num_licks=20, windowBefore=windowBefore,
                                                windowAfter=windowAfter, min_inter_lick_time=0.5)
         
-        fig, axes = plt.subplots(2,1)
+        fig, axes = plt.subplots(3,1)
+        fig.set_size_inches([12, 8])
         fig.suptitle(p + ' Lick-triggered LFP, ' + str(len(first_lick_times)) + ' rewarded lick bouts')
-        axes[0].imshow(lta.T, aspect='auto')
-        axes[1].plot(np.mean(lta, axis=1), 'k')
+        im_raw = axes[0].imshow(lta.T, aspect='auto')
+        im_filt = axes[1].imshow(lta_filt.T, aspect='auto')
+        plt.colorbar(im_raw, ax=axes[0])
+        plt.colorbar(im_filt, ax = axes[1])
+        dummy = plt.colorbar(im_filt, ax = axes[2])
+        dummy.remove()
+        axes[2].plot(np.mean(lta, axis=1), 'k')
         for a in axes:
             a.set_xticks(np.arange(0, windowBefore+windowAfter, windowBefore)*2500)
             a.set_xticklabels(np.round(np.arange(-windowBefore, windowAfter, windowBefore), decimals=2))
             
-        axes[1].set_xlim(axes[0].get_xlim())
-        axes[0].tick_params(bottom=False, labelbottom=False)
-        axes[1].set_xlabel('Time from lick bout (s)')
-        axes[0].set_ylabel('channel')
-        axes[1].set_ylabel('Mean across channels')
+        axes[2].set_xlim(axes[0].get_xlim())
+        axes[2].set_ylabel('Mean across channels')
+        axes[2].set_xlabel('Time from lick bout (s)')
+        
+        [a.tick_params(bottom=False, labelbottom=False) for a in axes[:2]]
+        [a.set_ylabel('channel') for a in axes[:2]]
+        axes[0].set_title('raw')
+        axes[1].set_title('high pass filtered > 1Hz')
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' lick-triggered LFP'))
 
@@ -249,6 +290,7 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
     ax[1].legend(['diode', 'vf', 'frame 60', 'lag'], markerscale=0.5)
 
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.png'))
+    save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.plotly.json'))
 
 
 def get_monitor_lag(syncDataset):
@@ -300,6 +342,7 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     ax.legend([v], ['expected interval'])
     
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
+    save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.plotly.json'))
 
 
 def vsync_report(syncDataset, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
@@ -415,6 +458,7 @@ def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, p
     rax[0].set_xlabel('Time (s)')
     
     save_figure(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.png'))
+    save_as_plotly_json(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.plotly.json'))
     #rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
 
 
@@ -519,7 +563,7 @@ def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Spike Count per ' + str(binwidth) + ' second bin')
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram'))
-    
+        save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram.plotly.json'))
 #    for ip, probe in enumerate(probe_dirs):
 #        p_name = probe.split('_')[-2][-1]
 #        base = os.path.join(os.path.join(probe, 'continuous'), 'Neuropix-PXI-100.0')
@@ -585,17 +629,21 @@ def plot_barcode_interval_hist(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix='')
             
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_{}_barcode_interval_hist.png'.format(p_name)))
 
+
 def plot_barcode_intervals(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
     
-    fig, ax = plt.subplots()
-    fig.suptitle('Sync Barcode Intervals')
+    fig, ax = plt.subplots(1,3)
+    fig.set_size_inches([12,4])
+    fig.suptitle('Barcode Intervals')
     bs_t, bs = probeSync.get_sync_barcodes(syncDataset)
-    ax.plot(np.diff(bs_t), 'k')
-    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax[2].plot(np.diff(bs_t), 'k')
+    ax[2].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax[2].set_title('Sync')
     
-    pfig, pax = plt.subplots(1,2)
-    pfig.set_size_inches([8,4])
-    pfig.suptitle('Probe Barcode Intervals')
+    #pfig, pax = plt.subplots(1,2)
+    #pfig.set_size_inches([8,4])
+    #pfig.suptitle('Probe Barcode Intervals')
+    pax = ax[:2]
     for ip, probe in enumerate(probe_dirs):
         
         p_name = probe.split('_')[-2][-1]     
@@ -603,16 +651,16 @@ def plot_barcode_intervals(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
         shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
         
         pax[0].plot(np.diff(be_t), probe_color_dict[p_name])
-        pax[0].set_title('uncorrected')
+        pax[0].set_title('Probes uncorrected')
         pax[1].plot(np.diff(be_t)*(30000./p_sampleRate), probe_color_dict[p_name])
-        pax[1].set_title('corrected')
+        pax[1].set_title('Probes corrected')
     
     pax[0].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     pax[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     pax[0].legend([probe.split('_')[-2][-1] for probe in probe_dirs])
     
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Sync_barcode_intervals.png'))
-    save_figure(pfig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_barcode_intervals.png'))
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'barcode_intervals.png'))
+    #save_figure(pfig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_barcode_intervals.png'))
     
 
 def plot_barcode_matches(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
@@ -775,7 +823,7 @@ def copy_probe_depth_images(paths, FIG_SAVE_DIR, prefix=''):
         if 'probe_depth' in file:
             source_path = paths[file]
             print(source_path)
-            dest_path = os.path.join(FIG_SAVE_DIR, file+'.png')
+            dest_path = os.path.join(FIG_SAVE_DIR, prefix+file+'.png')
             if not os.path.exists(os.path.dirname(dest_path)):
                 os.mkdir(os.path.dirname(dest_path))
             shutil.copyfile(source_path, dest_path)
@@ -832,8 +880,10 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
         #gs = gridspec.GridSpec(levels.size*2 + 1, conds.size, figure=fig)
         color_axes = []
         ims = []
-        cond_trial_duration = [0.4, 1.2]
+        cond_trial_duration = [0.2, 1.2]
+        cond_conv_kernel = [0.002, 0.01]
         for ic, cond in enumerate(conds):
+            kernel_size = cond_conv_kernel[ic]
             this_waveform = opto_pkl['opto_waveforms'][cond]
             plot_duration = cond_trial_duration[ic]
             ax_wave = fig.add_subplot(gs[0, ic*10:(ic+1)*10])
@@ -858,7 +908,7 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
                 trial_inds = (opto_stim_table['trial_levels']==level) & (opto_stim_table['trial_conditions']==cond)
                 trial_starts = trial_start_times[trial_inds]
                 psths = np.array([makePSTH_numba(s.flatten(), trial_starts-0.1, plot_duration, 
-                                        binSize=0.001, convolution_kernel=0.005, avg=True) for s in spikes])
+                                        binSize=0.001, convolution_kernel=kernel_size, avg=True) for s in spikes])
         
                 #bin_times = psths[0, 1, :]
                 psths = psths[unit_shank_order, 0, :].squeeze()
@@ -885,8 +935,8 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
 #        min_clim_val = np.min([im.get_clim()[0] for im in ims])
 #        max_clim_val = np.max([im.get_clim()[1] for im in ims])
         
-        min_clim_val = -10
-        max_clim_val = 20
+        min_clim_val = -5
+        max_clim_val = 50
         
         for im in ims:
             im.set_clim([min_clim_val, max_clim_val])    
@@ -915,7 +965,7 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
             labelleft=False)
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.png'))
-
+        save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.plotly.json'))
 
 def get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=10000):
     
@@ -970,6 +1020,10 @@ def save_figure(fig, save_path):
 
 def save_as_plotly_json(fig, save_path):
     
+    save_dir = os.path.dirname(save_path)
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+        
     plotly_fig = tls.mpl_to_plotly(fig)    
     plotly_fig.write_json(save_path)
     
