@@ -248,7 +248,7 @@ class run_qc():
         if not os.path.exists(probe_yield_dir):
             os.mkdir(probe_yield_dir)
 
-        analysis.plot_unit_quality_hist(self.metrics_dict, probe_yield_dir, prefix= r'unit_quality\\' + self.figure_prefix)
+        analysis.plot_unit_quality_hist(self.metrics_dict, probe_yield_dir, prefix= self.figure_prefix)
         analysis.plot_unit_distribution_along_probe(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix= r'unit_distribution\\' + self.figure_prefix)
         analysis.copy_probe_depth_images(self.paths, probe_yield_dir, prefix=r'probe_depth\\' + self.figure_prefix)
         analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
@@ -305,7 +305,7 @@ class run_qc():
         lfp_save_dir = os.path.join(self.FIG_SAVE_DIR, 'LFP')
         lick_times = analysis.get_rewarded_lick_times(probeSync.get_lick_times(self.syncDataset), 
                                                       self.FRAME_APPEAR_TIMES[self.behavior_start_frame:], self.trials, min_inter_lick_time=min_inter_lick_time)
-        analysis.plot_lick_triggered_LFP(self.lfp_dict, lick_times, lfp_save_dir, prefix=self.figure_prefix, 
+        analysis.plot_lick_triggered_LFP(self.lfp_dict, lick_times, lfp_save_dir, prefix=r'lick_triggered_average\\' + self.figure_prefix, 
                                 agarChRange=agarChRange, num_licks=num_licks, windowBefore=windowBefore, 
                                 windowAfter=windowAfter, min_inter_lick_time = min_inter_lick_time, behavior_duration=behavior_duration)
 

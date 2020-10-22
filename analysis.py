@@ -515,9 +515,11 @@ def plot_unit_distribution_along_probe(metrics_dict, info_dict, FIG_SAVE_DIR, pr
         noisehist = axes[1].hist(noise_units['peak_channel'], bins=bins, color='k', alpha=0.8)
         
         mask = np.array(info_dict[probe]['mask']).astype(int)
+        surface_channel = info_dict[probe]['surface_channel']
         axes[0].plot(np.arange(384), mask, 'k')
-        axes[0].legend(['mask'])
         axes[0].axis('off')
+        axes[0].axvline(surface_channel)
+        axes[0].legend(['mask', 'surface'])
         
         axes[1].set_xlabel('peak channel')
         axes[1].set_ylabel('unit count')
