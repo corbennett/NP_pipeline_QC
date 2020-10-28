@@ -219,7 +219,7 @@ class run_qc():
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
         behavior_analysis.plot_behavior(self.trials, behavior_plot_dir, prefix=self.figure_prefix)
-
+        behavior_analysis.plot_trial_licks(self.trials, self.vf, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
         trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
         analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 

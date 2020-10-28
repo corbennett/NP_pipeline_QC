@@ -9,14 +9,16 @@ import get_sessions as gs
 import os
 from run_qc_class import run_qc
 from matplotlib import pyplot as plt
+import pandas as pd
 
 #TODO: LOGGING!!! 
 
 sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7"]
 sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
-just_run_new_sessions = True
 
+local_probe_dict_save_dir = r"C:\Data\NP_behavior_unit_tables"
+just_run_new_sessions = False
 
 def find_new_sessions_to_run(sessions_to_run, destination):
     all_session_ids = [os.path.split(s)[-1] for s in sessions_to_run]
@@ -39,8 +41,9 @@ for ind, s in enumerate(sessions_to_run):
           .format(session_name, ind+1, len(sessions_to_run)))
     
     try:
-        r=run_qc(s, destination)
+        r=run_qc(s, destination, modules_to_run=['vsync', 'lfp'])
         session_errors[s] = r.errors
+        #pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
     
     except Exception as e:
         failed.append((s, e))

@@ -65,7 +65,46 @@ def plot_trial_type_pie(trial_counts, labels, save_dir, prefix=''):
           bbox_to_anchor=(1, 0, 0.5, 1))
     
     save_figure(fig, os.path.join(save_dir, prefix+'trial_type_piechart.png'))
+
+
+def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir, prefix=''):
     
+    frame_times = np.copy(frame_times)
+    frame_times = frame_times[behavior_start_frame:]
+    
+    lick_frames = trials['lick_frames']
+    lick_times_trial_binned = [frame_times[f] for f in lick_frames]
+    
+    #change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
+    change_frames = trials['change_frame']
+    resp_types =  ['MISS', 'HIT', 'FA', 'CR']
+    colors = ['orange', 'g', 'r', 'b']
+    fig, axes = plt.subplots(1, len(resp_types))
+    fig.set_size_inches([12, 4])
+    for ir, resp_type in enumerate(resp_types):
+        ax = axes[ir]
+        ax.set_title(resp_type)
+        #change_time_line = ax.axvline(0, c='k')
+        lick_window_start = ax.axvline(0.15, c='k', linestyle='--')
+        lick_window_end = ax.axvline(0.75, c='k', linestyle='--')
+        trial_counter = 0
+        for t, trial in trials.iterrows():
+            if trial['response_type'] == resp_type:
+                lts = lick_times_trial_binned[t]
+                change_frame = int(change_frames[t])
+                change_time = frame_times[change_frame]
+                
+                lts = lts - change_time
+                ax.plot(lts, trial_counter*np.ones(len(lts)), '|', c = colors[ir], ms = 3, markeredgewidth=3)
+                trial_counter += 1
+        ax.set_xlim([-0.5, 2])
+        ax.set_xlabel('Time from change (s)')
+        if ir == 0:
+            ax.legend([lick_window_start], ['response win'])
+            ax.set_ylabel('trials')     
+    
+    save_figure(fig, os.path.join(save_dir, prefix+'trial_licks.png'))
+
     
 def save_figure(fig, save_path):
     

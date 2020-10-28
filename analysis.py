@@ -290,7 +290,7 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
     ax[1].legend(['diode', 'vf', 'frame 60', 'lag'], markerscale=0.5)
 
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.png'))
-    save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.plotly.json'))
+    #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.plotly.json'))
 
 
 def get_monitor_lag(syncDataset):
@@ -342,7 +342,7 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     ax.legend([v], ['expected interval'])
     
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
-    save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.plotly.json'))
+    #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.plotly.json'))
 
 
 def vsync_report(syncDataset, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
@@ -1015,7 +1015,7 @@ def save_figure(fig, save_path):
     
     save_dir = os.path.dirname(save_path)
     if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
+        os.makedirs(save_dir)
     
     fig.savefig(save_path)
 
