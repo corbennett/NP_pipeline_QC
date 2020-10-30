@@ -233,6 +233,8 @@ class local_data_getter(data_getter):
                 'RawEyeTrackingVideoMetadata': '*eye.json',
                 'RawBehaviorTrackingVideoMetadata': '*face.json',
                 'RawFaceTrackingVideoMetadata': '*behavior.json',
+                'EcephysPlatformFile': '*platformD1.json',
+                'NewstepConfiguration': '*motor-locs.csv'
                 }
         
         for fn in file_glob_dict:
@@ -257,8 +259,11 @@ class local_data_getter(data_getter):
         for probeID in 'ABCDEF':
             if self.cortical_sort:
                 probe_base = glob_file(os.path.join(self.base_dir, 'cortical*probe'+probeID+'_sorted'))
+                lfp_base = glob_file(os.path.join(self.base_dir, '*probe'+probeID+'_sorted'))
             else:
                 probe_base = glob_file(os.path.join(self.base_dir, '*probe'+probeID+'_sorted'))
+                lfp_base = probe_base
+                
             if probe_base is not None:
                 self.data_dict['data_probes'].append(probeID)
                 self.data_dict['probe' + probeID] = probe_base
@@ -268,6 +273,10 @@ class local_data_getter(data_getter):
                 
                 info_json = glob_file(os.path.join(probe_base, '*probe_info*json'))
                 self.data_dict['probe' + probeID + '_info'] = info_json
+            
+            if lfp_base is not None:
+                self.data_dict['lfp' + probeID] = lfp_base
+                
 
     def get_image_data(self):
          

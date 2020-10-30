@@ -40,7 +40,7 @@ D1_schema = {
  'isi _registration_coordinates': {'rel_path': '*.ISIregistration.npz',
   'minimum_size': 2926.4},
  'newstep_csv': {'rel_path': '*.motor-locs.csv',
-  'minimum_size': 4641961.600000001},
+  'minimum_size': 100.},
  'optogenetic_stimulus': {'rel_path': '*.opto.pkl',
   'minimum_size': 959931.2000000001},
  'overlay_image': {'rel_path': '*.overlay.png', 'minimum_size': 542164.0},

@@ -64,6 +64,90 @@ def makePSTH(spikes,startTimes,windowDur,binSize=0.01, avg=True):
     return counts
 
 
+def map_newscale_SNs_to_probes(motor_locs):
+
+	serial_numbers = motor_locs['serialNum'].unique()
+
+	# Known serial number to probe mappings for NP rigs. Update here if new motors are added.
+	NP0_serialToProbeDict = {' SN32148': 'A', ' SN32142': 'B', ' SN32144':'C', ' SN32149':'D', ' SN32135':'E', ' SN24273':'F'}
+	NP1_serialToProbeDict = {' SN34027': 'A', ' SN31056': 'B', ' SN32141':'C', ' SN32146':'D', ' SN32139':'E', ' SN32145':'F'}
+	NP3_serialToProbeDict = {' SN31212': 'A', ' SN34029': 'B', ' SN31058':'C', ' SN24272':'D', ' SN32152':'E', ' SN36800':'F'}
+
+	known_serial_to_probe_mapping = {}
+	[known_serial_to_probe_mapping.update(d) for d in [NP0_serialToProbeDict, NP1_serialToProbeDict, NP3_serialToProbeDict]]
+
+	# Grab the probe mapping for all known serial numbers and leave unknown serial numbers unmapped
+	try:
+	    assert(all([s in known_serial_to_probe_mapping for s in serial_numbers]))
+	except Exception as e:
+	    unknown = []
+	    for s in serial_numbers:
+	        if s not in known_serial_to_probe_mapping:
+	            unknown.append(s)
+	            known_serial_to_probe_mapping[s] = ''
+	    warning_string = ('\nWARNING: Unknown newscale serial numbers {} encountered, '
+	                    'please update serial number dictionary in data_io.py file'.format(unknown))
+	    print(warning_string)
+	finally:
+	    serialToProbeDict = {s:known_serial_to_probe_mapping[s] for s in serial_numbers}
+	    serialToProbeDict = {k: v for k, v in sorted(serialToProbeDict.items(), key=lambda item: item[1])}
+	print('\nUsing following mapping between serial numbers and probe IDs: {}'.format(serialToProbeDict))
+
+	return serialToProbeDict
+
+
+def read_motor_locs_into_dataframe(motor_locs_csv_path):
+	
+	motor_locs = pd.read_csv(motor_locs_csv_path, header=None, names=['time', 'serialNum', 'x', 'y', 'z', 'relx', 'rely', 'relz'])
+	motor_locs['time'] = pd.to_datetime(motor_locs['time'])
+	motor_locs = motor_locs.set_index('time')
+
+	return motor_locs.dropna()
+
+
+def find_motor_coords_at_time(motor_locs_path, time):
+    
+    time = pd.to_datetime(time)
+    motor_locs = read_motor_locs_into_dataframe(motor_locs_path)
+    serialToProbeDict = map_newscale_SNs_to_probes(motor_locs)
+
+    pcoordsDict = {}
+    for pSN in serialToProbeDict:
+	    pid = serialToProbeDict[pSN]
+	    probe_locs = motor_locs.loc[motor_locs.serialNum==pSN]
+	    probe_locs['relz'] = 6000-probe_locs['relz'] #correct for weird z logging
+	    
+	    probe_locs = probe_locs.loc[(probe_locs.index<time)]
+	    closest_motor_log_index = np.argmin(np.abs(probe_locs.index - time))
+	    closest_motor_log = probe_locs.iloc[closest_motor_log_index]
+	    #print('motor time: ', closest_motor_log)
+	    
+	    pcoordsDict[pid] = closest_motor_log[['relx', 'rely', 'relz']].to_list()
+
+    return {pid: pcoordsDict[pid] for pid in 'ABCDEF' if pid in pcoordsDict}
+
+
+def probe_insertion_report(motor_locs_path, insertion_start_time, experiment_start_time,
+                           FIG_SAVE_DIR, prefix=''):
+    
+    start_coords = find_motor_coords_at_time(motor_locs_path, insertion_start_time)
+    end_coords = find_motor_coords_at_time(motor_locs_path, experiment_start_time)
+    
+    report = {
+            'insertion_start_coords': start_coords,
+            'insertion_end_coords': end_coords 
+            }
+
+    for pid in start_coords:
+        
+        zstart = start_coords[pid][2]
+        zend = end_coords[pid][2]
+        report[pid + '_insertion_depth'] = zend-zstart
+
+    save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'probe_insertion_report.json'))
+    return report
+
+     
 def plot_rf(mapping_pkl_data, spikes, first_frame_offset, frameAppearTimes, resp_latency=0.025, plot=True, returnMat=False):
 
     

@@ -36,7 +36,7 @@ class run_qc():
         self.errors = []
         self.cortical_sort = cortical_sort
         self.genotype = None
-
+        
         identifier = exp_id
         if identifier.find('_')>=0:
             d = data_getters.local_data_getter(base_dir=identifier, cortical_sort=cortical_sort)
@@ -116,12 +116,15 @@ class run_qc():
         self.behavior_end_time, self.mapping_end_time, self.replay_end_time = [self.FRAME_APPEAR_TIMES[f] for f in 
                                                                       [self.behavior_end_frame, self.mapping_end_frame, self.replay_end_frame]]
         self.probe_dirs = [self.paths['probe'+pid] for pid in self.paths['data_probes']]
+        self.lfp_dirs = [self.paths['lfp'+pid] for pid in self.paths['data_probes']]
+        
         self.probe_dict = None
         self.lfp_dict = None
         self.metrics_dict = None
         self.probeinfo_dict = None
  
         self._get_genotype()
+        self._get_platform_info()
 
         self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
@@ -151,7 +154,7 @@ class run_qc():
 
 
     def _build_lfp_dict(self):
-        self.lfp_dict = probeSync.build_lfp_dict(self.probe_dirs, self.syncDataset)
+        self.lfp_dict = probeSync.build_lfp_dict(self.lfp_dirs, self.syncDataset)
 
 
     def _build_metrics_dict(self):
@@ -192,7 +195,15 @@ class run_qc():
             print('Could not find genotype for mouse {}'.format(self.paths['external_specimen_name']))
             self.genotype = ''
 
-    
+
+    def _get_platform_info(self):
+
+        # read in platform json to get exp start time
+        platform_file = self.paths['EcephysPlatformFile']
+        with open(platform_file, 'r') as file:
+            self.platform_info = json.load(file)
+
+
     def make_specimen_meta_json(self):
 
         meta = {}
@@ -310,10 +321,13 @@ class run_qc():
                                 windowAfter=windowAfter, min_inter_lick_time = min_inter_lick_time, behavior_duration=behavior_duration)
 
     def probe_targeting(self):
-
+        
         targeting_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_targeting')
         images_to_copy = ['insertion_location_image', 'overlay_image']
         analysis.copy_files(images_to_copy, self.paths, targeting_dir)
+        self.probe_insertion_report = analysis.probe_insertion_report(self.paths['NewstepConfiguration'], 
+                                        self.platform_info['ProbeInsertionStartTime'], self.platform_info['ExperimentStartTime'], 
+                                        targeting_dir, prefix=self.figure_prefix)
 
 
     def videos(self, frames_for_each_epoch=[2,2,2]):

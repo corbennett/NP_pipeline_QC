@@ -18,7 +18,7 @@ sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='202006
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
 
 local_probe_dict_save_dir = r"C:\Data\NP_behavior_unit_tables"
-just_run_new_sessions = False
+just_run_new_sessions = True
 
 def find_new_sessions_to_run(sessions_to_run, destination):
     all_session_ids = [os.path.split(s)[-1] for s in sessions_to_run]
@@ -31,7 +31,7 @@ def find_new_sessions_to_run(sessions_to_run, destination):
 if just_run_new_sessions:
     sessions_to_run = find_new_sessions_to_run(sessions_to_run, destination)
 
- 
+modules_to_run = 'all'
 failed = []
 session_errors = {}
 for ind, s in enumerate(sessions_to_run):
@@ -41,7 +41,7 @@ for ind, s in enumerate(sessions_to_run):
           .format(session_name, ind+1, len(sessions_to_run)))
     
     try:
-        r=run_qc(s, destination, modules_to_run=['vsync', 'lfp'])
+        r=run_qc(s, destination, modules_to_run=modules_to_run)
         session_errors[s] = r.errors
         #pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
     
