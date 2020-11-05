@@ -31,7 +31,8 @@ def find_new_sessions_to_run(sessions_to_run, destination):
 if just_run_new_sessions:
     sessions_to_run = find_new_sessions_to_run(sessions_to_run, destination)
 
-modules_to_run = 'all'
+modules_to_run = 'all' #['probe_targeting', 'behavior']
+cortical_sort = True
 failed = []
 session_errors = {}
 for ind, s in enumerate(sessions_to_run):
@@ -41,9 +42,9 @@ for ind, s in enumerate(sessions_to_run):
           .format(session_name, ind+1, len(sessions_to_run)))
     
     try:
-        r=run_qc(s, destination, modules_to_run=modules_to_run)
+        r=run_qc(s, destination, modules_to_run=modules_to_run, cortical_sort=cortical_sort)
         session_errors[s] = r.errors
-        #pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
+        pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
     
     except Exception as e:
         failed.append((s, e))

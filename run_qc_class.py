@@ -37,6 +37,12 @@ class run_qc():
         self.cortical_sort = cortical_sort
         self.genotype = None
         
+        self.data_stream_status = {'pkl' : [False, self._load_pkl_data],
+                                   'sync': [False, self._load_sync_data],
+                                   'unit': [False, self._build_unit_table],
+                                   'LFP': [False, self. _build_lfp_dict]
+                                   }
+        
         identifier = exp_id
         if identifier.find('_')>=0:
             d = data_getters.local_data_getter(base_dir=identifier, cortical_sort=cortical_sort)
@@ -60,9 +66,60 @@ class run_qc():
 
         for f,s in zip([self.SYNC_FILE, self.BEHAVIOR_PKL, self.REPLAY_PKL, self.MAPPING_PKL], ['sync: ', 'behavior: ', 'replay: ', 'mapping: ']):
             print(s + f)
+        
+        self.probe_dirs = [self.paths['probe'+pid] for pid in self.paths['data_probes']]
+        self.lfp_dirs = [self.paths['lfp'+pid] for pid in self.paths['data_probes']]
+        
+        self.probe_dict = None
+        self.lfp_dict = None
+        self.metrics_dict = None
+        self.probeinfo_dict = None
+ 
+        self._get_genotype()
+        self._get_platform_info()
 
-        ### GET MAIN DATA STREAMS ###
+        self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
+        self._run_modules()
+        
+
+    def _module_validation_decorator(data_streams):
+        ''' Decorator to handle calling the module functions below and supplying
+            the right data streams. 
+            INPUT: 
+                data_streams: This should be a list of the data streams required
+                    by this module function. Options are (as of 10/30/2020):
+                        'pkl' : all the pkl files
+                        'sync': syncdataset
+                        'unit': kilosort data, builds unit table
+                        'LFP': LFP data, builds lfp table
+        '''
+        def decorator(module_func):
+            def wrapper(self):
+                for d in data_streams:
+                    if not self.data_stream_status[d][0]:
+                        self.data_stream_status[d][1]()
+                module_func(self)
+        
+            return wrapper
+        return decorator
+
+
+    def _load_sync_data(self): 
         self.syncDataset = sync_dataset(self.SYNC_FILE)
+        vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
+        MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
+        if MONITOR_LAG>0.06:
+            self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
+            MONITOR_LAG = 0.036
+
+        self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+        self.data_stream_status['sync'][0] = True
+
+
+    def _load_pkl_data(self):
+        if not self.data_stream_status['sync'][0]:
+            self._load_sync_data()
+    
         self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
         self.replay_data = pd.read_pickle(self.REPLAY_PKL)
@@ -71,7 +128,6 @@ class run_qc():
         self.trials = behavior_analysis.get_trials_df(self.behavior_data)
 
         ### CHECK FRAME COUNTS ###
-        vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
 
         self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1
         self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
@@ -104,30 +160,12 @@ class run_qc():
         self.mapping_end_frame = self.mapping_start_frame + self.mapping_frame_count - 1
         self.replay_end_frame = self.replay_start_frame + self.replay_frame_count - 1
 
-        MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
-        if MONITOR_LAG>0.06:
-            self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
-            MONITOR_LAG = 0.036
-
-        self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG  
  
         self.behavior_start_time, self.mapping_start_time, self.replay_start_time = [self.FRAME_APPEAR_TIMES[f] for f in 
                                                                       [self.behavior_start_frame, self.mapping_start_frame, self.replay_start_frame]]
         self.behavior_end_time, self.mapping_end_time, self.replay_end_time = [self.FRAME_APPEAR_TIMES[f] for f in 
                                                                       [self.behavior_end_frame, self.mapping_end_frame, self.replay_end_frame]]
-        self.probe_dirs = [self.paths['probe'+pid] for pid in self.paths['data_probes']]
-        self.lfp_dirs = [self.paths['lfp'+pid] for pid in self.paths['data_probes']]
-        
-        self.probe_dict = None
-        self.lfp_dict = None
-        self.metrics_dict = None
-        self.probeinfo_dict = None
- 
-        self._get_genotype()
-        self._get_platform_info()
-
-        self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
-        self._run_modules()
+        self.data_stream_status['pkl'][0] = True
 
 
     def _run_modules(self):
@@ -151,10 +189,12 @@ class run_qc():
     def _build_unit_table(self):
         ### BUILD UNIT TABLE ####
         self.probe_dict = probeSync.build_unit_table(self.probes_to_run, self.paths, self.syncDataset)
+        self.data_stream_status['unit'][0] = True
 
 
     def _build_lfp_dict(self):
         self.lfp_dict = probeSync.build_lfp_dict(self.lfp_dirs, self.syncDataset)
+        self.data_stream_status['LFP'][0] = True
 
 
     def _build_metrics_dict(self):
@@ -226,6 +266,7 @@ class run_qc():
         analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'session_meta.json'))
 
 
+    @_module_validation_decorator(data_streams=['pkl', 'sync'])
     def behavior(self):
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
@@ -236,7 +277,7 @@ class run_qc():
         analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 
                                     behavior_plot_dir, prefix=self.figure_prefix)
 
-
+    @_module_validation_decorator(data_streams=['sync', 'pkl'])
     def vsync(self):
         ### Plot vsync info ###
         vsync_save_dir = os.path.join(self.FIG_SAVE_DIR, 'vsyncs')
@@ -247,7 +288,7 @@ class run_qc():
         analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
         analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
 
-
+    
     def probe_yield(self):
         ### Plot Probe Yield QC ###
         if self.metrics_dict is None:
@@ -280,7 +321,8 @@ class run_qc():
         unit_metrics_dir = os.path.join(self.FIG_SAVE_DIR, 'unit_metrics')
         analysis.plot_unit_metrics(self.paths, unit_metrics_dir, prefix=self.figure_prefix)
 
-
+    
+    @_module_validation_decorator(data_streams=['sync'])
     def probe_sync_alignment(self):
         ### Probe/Sync alignment
         probeSyncDir = os.path.join(self.FIG_SAVE_DIR, 'probeSyncAlignment')
@@ -289,7 +331,8 @@ class run_qc():
         analysis.probe_sync_report(self.probe_dirs, self.syncDataset, probeSyncDir, prefix=self.figure_prefix)
         analysis.plot_barcode_matches(self.probe_dirs, self.syncDataset, probeSyncDir, prefix=self.figure_prefix)
 
-
+    
+    @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
     def receptive_fields(self):
         ### Plot receptive fields
         if self.probe_dict is None:
@@ -299,14 +342,15 @@ class run_qc():
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
                 os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, prefix=self.figure_prefix)
 
-
+    @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
     def change_responses(self):
         if self.probe_dict is None:
             self._build_unit_table()
         analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, self.trials, 
                                              self.FRAME_APPEAR_TIMES, os.path.join(self.FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=66, prefix=self.figure_prefix)
 
-
+    
+    @_module_validation_decorator(data_streams=['pkl', 'sync', 'LFP'])
     def lfp(self, agarChRange=None, num_licks=20, windowBefore=0.5, 
             windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
 
@@ -329,7 +373,7 @@ class run_qc():
                                         self.platform_info['ProbeInsertionStartTime'], self.platform_info['ExperimentStartTime'], 
                                         targeting_dir, prefix=self.figure_prefix)
 
-
+    @_module_validation_decorator(data_streams=['sync'])
     def videos(self, frames_for_each_epoch=[2,2,2]):
         ### VIDEOS ###
         video_dir = os.path.join(self.FIG_SAVE_DIR, 'videos')
@@ -339,7 +383,8 @@ class run_qc():
                                     [self.behavior_end_time, self.mapping_end_time, self.replay_end_time],
                                      epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
 
-
+    
+    @_module_validation_decorator(data_streams=['sync', 'pkl', 'unit'])
     def optotagging(self):
         ### Plot opto responses along probe ###
         opto_dir = os.path.join(self.FIG_SAVE_DIR, 'optotagging')
