@@ -159,7 +159,7 @@ def make_dest_path(dest_dir, rel_path, filename):
 
 def get_probe_directories(base):
     
-    pattern = re.compile('[0-9]{10}_[0-9]{6}_[0-9]{8}_probe[A-F]_sorted')
+    pattern = re.compile('1[0-9]{9}_[0-9]{6}_[0-9]{8}_probe[A-F]_sorted')
     
     probe_dirs = glob.glob(os.path.join(base, '[0-9]*probe*_sorted'))
     good_dirs = []
