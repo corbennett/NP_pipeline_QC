@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("-ctx", "--cortical_sort", help="if tag included, run on cortical sort",
                     action="store_true")
 
-    parser.add_argument("-d", "--destination", help="base directory to save QC directory",
+    parser.add_argument("-d", "--destination", help="base directory to save QC output",
                     default=r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC")
     
     args = parser.parse_args()
