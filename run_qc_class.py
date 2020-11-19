@@ -74,6 +74,7 @@ class run_qc():
         self.lfp_dict = None
         self.metrics_dict = None
         self.probeinfo_dict = None
+        self.agar_channel_dict = None
  
         self._get_genotype()
         self._get_platform_info()
@@ -244,6 +245,16 @@ class run_qc():
             self.platform_info = json.load(file)
 
 
+    def _get_agar_channels(self):
+        
+        if self.probeinfo_dict is None:
+            self._build_probeinfo_dict()
+        
+        self.agar_channel_dict = {}
+        for pid in self.probes_to_run:
+            self.agar_channel_dict[pid] = analysis.find_agar_channels(self.probeinfo_dict[pid])
+
+
     def make_specimen_meta_json(self):
 
         meta = {}
@@ -342,6 +353,7 @@ class run_qc():
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
                 os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, prefix=self.figure_prefix)
 
+    
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
     def change_responses(self):
         if self.probe_dict is None:
@@ -355,14 +367,16 @@ class run_qc():
             windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
 
         ### LFP ###
+        self._get_agar_channels() #to re-reference
         if self.lfp_dict is None:
             self._build_lfp_dict()
         lfp_save_dir = os.path.join(self.FIG_SAVE_DIR, 'LFP')
         lick_times = analysis.get_rewarded_lick_times(probeSync.get_lick_times(self.syncDataset), 
                                                       self.FRAME_APPEAR_TIMES[self.behavior_start_frame:], self.trials, min_inter_lick_time=min_inter_lick_time)
-        analysis.plot_lick_triggered_LFP(self.lfp_dict, lick_times, lfp_save_dir, prefix=r'lick_triggered_average\\' + self.figure_prefix, 
+        analysis.plot_lick_triggered_LFP(self.lfp_dict, self.agar_channel_dict, lick_times, lfp_save_dir, prefix=r'lick_triggered_average\\' + self.figure_prefix, 
                                 agarChRange=agarChRange, num_licks=num_licks, windowBefore=windowBefore, 
                                 windowAfter=windowAfter, min_inter_lick_time = min_inter_lick_time, behavior_duration=behavior_duration)
+
 
     def probe_targeting(self):
         
@@ -372,6 +386,18 @@ class run_qc():
         self.probe_insertion_report = analysis.probe_insertion_report(self.paths['NewstepConfiguration'], 
                                         self.platform_info['ProbeInsertionStartTime'], self.platform_info['ExperimentStartTime'], 
                                         targeting_dir, prefix=self.figure_prefix)
+    
+
+    def brain_health(self):
+        
+        brain_health_dir = os.path.join(self.FIG_SAVE_DIR, 'brain_health')
+        images_to_copy = ['brain_surface_image_left', 'pre_insertion_surface_image_left', 
+                          'post_insertion_surface_image_left','post_stimulus_surface_image_left',
+                          'post_experiment_surface_image_left']
+    
+        analysis.copy_images(images_to_copy, self.paths, brain_health_dir, 
+                             x_downsample_factor=0.5, y_downsample_factor=0.5)
+
 
     @_module_validation_decorator(data_streams=['sync'])
     def videos(self, frames_for_each_epoch=[2,2,2]):

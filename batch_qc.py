@@ -32,7 +32,7 @@ if just_run_new_sessions:
     sessions_to_run = find_new_sessions_to_run(sessions_to_run, destination)
 
 modules_to_run = 'all' #['probe_targeting', 'behavior']
-cortical_sort = True
+cortical_sort = False
 failed = []
 session_errors = {}
 for ind, s in enumerate(sessions_to_run):

@@ -249,40 +249,59 @@ def lickTriggeredLFP(lick_times, lfp, lfp_time, agarChRange=None, num_licks=20,
     return m, m_filt, mtime, first_lick_times
 
 
-def plot_lick_triggered_LFP(lfp_dict, lick_times, FIG_SAVE_DIR, prefix='', 
+def plot_lick_triggered_LFP(lfp_dict, agar_chan_dict, lick_times, FIG_SAVE_DIR, prefix='', 
                             agarChRange=None, num_licks=20, windowBefore=1, 
                             windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
     
     for p in lfp_dict:
 
         plfp = lfp_dict[p]['lfp']
+        plfp_time = lfp_dict[p]['time']
+        
+        # get absolute channel range over licks to check for saturation
+        lick_inds = np.searchsorted(plfp_time, lick_times)
+        last_lick_ind = lick_inds[num_licks] if num_licks<len(lick_inds) else lick_inds[-1]
+        chmax = np.max(plfp[:last_lick_ind], axis=0)
+        chmin = np.min(plfp[:last_lick_ind], axis=0)
+        chrange = (chmax-chmin)*0.195
+        
+        agarChRange = np.array(agar_chan_dict[p]).astype(int)
+        print('Using agar range {} for probe {}'.format(agarChRange, p))
+        
         lta, lta_filt, ltime, first_lick_times = analysis.lickTriggeredLFP(lick_times, plfp, lfp_dict[p]['time'], 
-                                               agarChRange=[325, 350], num_licks=20, windowBefore=windowBefore,
+                                               agarChRange=agarChRange, num_licks=20, windowBefore=windowBefore,
                                                windowAfter=windowAfter, min_inter_lick_time=0.5)
         
-        fig, axes = plt.subplots(3,1)
+        fig, axes = plt.subplots(4,1)
         fig.set_size_inches([12, 8])
         fig.suptitle(p + ' Lick-triggered LFP, ' + str(len(first_lick_times)) + ' rewarded lick bouts')
         im_raw = axes[0].imshow(lta.T, aspect='auto')
         im_filt = axes[1].imshow(lta_filt.T, aspect='auto')
         plt.colorbar(im_raw, ax=axes[0])
         plt.colorbar(im_filt, ax = axes[1])
-        dummy = plt.colorbar(im_filt, ax = axes[2])
-        dummy.remove()
+        
+        for ax in axes[2:]:
+            dummy = plt.colorbar(im_filt, ax = ax)
+            dummy.remove()
+            
         axes[2].plot(np.mean(lta, axis=1), 'k')
-        for a in axes:
+        for a in axes[:-1]:
             a.set_xticks(np.arange(0, windowBefore+windowAfter, windowBefore)*2500)
             a.set_xticklabels(np.round(np.arange(-windowBefore, windowAfter, windowBefore), decimals=2))
             
         axes[2].set_xlim(axes[0].get_xlim())
         axes[2].set_ylabel('Mean across channels')
-        axes[2].set_xlabel('Time from lick bout (s)')
+        
         
         [a.tick_params(bottom=False, labelbottom=False) for a in axes[:2]]
         [a.set_ylabel('channel') for a in axes[:2]]
         axes[0].set_title('raw')
         axes[1].set_title('high pass filtered > 1Hz')
         
+        axes[3].plot(np.arange(384), chrange)
+        axes[3].set_xlabel('channel')
+        axes[3].set_ylabel('abs range, uV')
+        axes[2].set_xlabel('Time from lick bout (s)')
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' lick-triggered LFP'))
 
 
@@ -1072,7 +1091,20 @@ def get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=10000):
     
     return trial_dict
     
-   
+
+def find_agar_channels(probeinfo):
+    
+    surface_channel = probeinfo['surface_channel']
+    air_channel = probeinfo['air_channel'] - 10 #allow for buffer
+    
+    agar_channels = np.arange(surface_channel, air_channel)
+    if len(agar_channels)<20:
+        #assume that at least 20 channels were between air and brain
+        agar_channels = np.arange(air_channel-20, air_channel)
+        
+    return [agar_channels[0], agar_channels[-1]]
+            
+
 def copy_files(file_keys, paths, FIG_SAVE_DIR, prefix=''):
     
     for key in file_keys:
@@ -1083,7 +1115,24 @@ def copy_files(file_keys, paths, FIG_SAVE_DIR, prefix=''):
                 os.mkdir(os.path.dirname(dest_path))
             
             shutil.copyfile(source_path, dest_path)
-        
+
+
+def copy_images(file_keys, paths, FIG_SAVE_DIR, x_downsample_factor=None, y_downsample_factor=None, prefix=''):
+    
+    for key in file_keys:
+        source_path = paths[key]
+        if source_path is not None:
+            dest_path = os.path.join(FIG_SAVE_DIR, prefix + os.path.basename(source_path))
+            if not os.path.exists(os.path.dirname(dest_path)):
+                os.mkdir(os.path.dirname(dest_path))
+            
+            if x_downsample_factor is None and y_downsample_factor is None:
+                shutil.copyfile(source_path, dest_path)
+            else:
+                im = cv2.imread(source_path)
+                im_resized = resize_image(im, fx=x_downsample_factor, fy=y_downsample_factor)
+                cv2.imwrite(dest_path, im_resized)
+
 
 def save_json(to_save, save_path):
     
@@ -1121,5 +1170,12 @@ def read_json(path):
     
     return j
 
+
+def resize_image(image, fx=0.5, fy=0.5):
+    
+    im_resized = cv2.resize(image, (0,0), fx=fx, fy=fy)
+    
+    return im_resized
+    
     
     
