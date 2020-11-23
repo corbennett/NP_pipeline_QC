@@ -24,7 +24,8 @@ import scipy.signal
 
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
             FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, 
-            response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix=''): 
+            response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix='',
+            save_rf_mat=False): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
     rfs = {p:{k:[] for k in ['peak_channel', 'unitID', 'rfmat']} for p in probe_dict}
@@ -96,6 +97,11 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             plot_tiled_rfs(rfs, FIG_SAVE_DIR, chan_bin, max_rows, max_cols, prefix)
         except Exception as E:
             logging.error('Failed to tile rfs: {}'.format(E))
+            
+    if save_rf_mat:
+        rf_save_dir = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\rf_summary"
+        with open(os.path.join(rf_save_dir, prefix +'rfmats.npy'), 'wb') as fp:
+            pickle.dump(rf_mat, fp)
                 
     if return_rfs:
         return rfs

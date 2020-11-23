@@ -244,7 +244,9 @@ class local_data_getter(data_getter):
                 if len(path)>0:
                     self.data_dict[fn] = path[0]  
             else:
-                self.data_dict[fn] = glob_file(os.path.join(self.base_dir, file_glob_dict[fn]))
+                filepath = glob_file(os.path.join(self.base_dir, file_glob_dict[fn]))
+                if filepath is not None:
+                    self.data_dict[fn] = filepath
 
         
         basename = os.path.basename(self.base_dir)

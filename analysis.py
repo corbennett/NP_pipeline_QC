@@ -127,6 +127,83 @@ def find_motor_coords_at_time(motor_locs_path, time):
     return {pid: pcoordsDict[pid] for pid in 'ABCDEF' if pid in pcoordsDict}
 
 
+def calculate_probe_noise(datfilepath, chrange=[0, 384], sampleRate=30000, 
+                          chunk_size=5, offset = 10, channelNumber=384, return_chunk=False):
+    '''Read in raw AP band data and find noise for a chunk of the data
+        INPUTS:
+            datfilepath: path to binary file with raw data
+            chrange: channels over which to calculate noise
+            sampleRate: nominal probe sample rate
+            chunk_size: length of chunk to read in (in seconds)
+            offset: when to start reading the data (in seconds)
+            channelNumber: total number of recording channels in data file
+    '''
+    
+    d = np.memmap(datfilepath, dtype = 'int16', mode = 'r+')
+    d = np.reshape(d, (int(d.size/channelNumber), channelNumber))
+    
+    chunk = d[offset*sampleRate:(offset+chunk_size)*sampleRate, chrange[0]:chrange[1]]
+    channel_std = np.std(chunk, axis=0)*0.195 #get standard deviation for each channel and convert to uV
+    
+    if return_chunk:
+        return chunk, channel_std
+    else:
+        return channel_std
+
+
+def plot_raw_AP_band(datachunk, probeID, probe_info_dict, FIG_SAVE_DIR, skip_interval = 20,
+                           sampleRate=30000, channelNumber=384, yrange=[-400, 400], prefix=''):
+    
+    channels_to_plot = np.arange(0, datachunk.shape[1], skip_interval)
+    num_channels = len(channels_to_plot)
+    time = np.linspace(0, datachunk.shape[0]/sampleRate, datachunk.shape[0])
+    
+    surface_channel = probe_info_dict['surface_channel']
+    
+    fig, axes = plt.subplots(num_channels)
+    fig.set_size_inches([6, 12])
+    for ic, chan in enumerate(channels_to_plot[::-1]):
+        
+        chan_data = datachunk[:, chan] * 0.195
+        color = 'k' if chan<surface_channel else '0.6'
+        
+        ax = axes[ic]
+        ax.set_ylabel(chan, rotation=0)
+        ax.plot(time, chan_data, color)
+        ax.set_ylim(yrange)
+        ax.yaxis.set_label_position('right')
+        if ic == len(axes)-1:
+            [ax.spines[pos].set_visible(False) for pos in ['right', 'top']]
+            ax.set_xlabel('Time (s)')
+        else:
+            ax.set_yticks([])
+            ax.xaxis.set_visible(False)
+            [ax.spines[pos].set_visible(False) for pos in ['right', 'top', 'left', 'bottom']]
+            
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + probeID + ' AP band raw snippet'))
+  
+      
+def plot_AP_band_noise(probe_dirs, probes_to_run, probe_info_dicts, FIG_SAVE_DIR,
+                       data_chunk_size = 5, prefix=''):
+    
+    for pid in probes_to_run:
+        
+        pdir = [d for d in probe_dirs if 'probe'+pid in d][0]
+        datfilepath = glob_file(os.path.join(pdir, 'continuous\\Neuropix-PXI-100.0'), 'continuous.dat')
+        
+        chunk, chan_std = calculate_probe_noise(datfilepath, chunk_size= data_chunk_size, return_chunk=True)
+        
+        fig, ax = plt.subplots()
+        fig.set_size_inches([3, 12])
+        ax.plot(chan_std, np.arange(len(chan_std)), 'k')
+        ax.set_ylabel('channel_number')
+        ax.set_xlabel('standard dev (uV)')
+        
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + pid + ' AP band channel noise'))
+        
+        plot_raw_AP_band(chunk, pid, probe_info_dicts[pid], FIG_SAVE_DIR, prefix=prefix)
+    
+
 def probe_insertion_report(motor_locs_path, insertion_start_time, experiment_start_time,
                            FIG_SAVE_DIR, prefix=''):
     

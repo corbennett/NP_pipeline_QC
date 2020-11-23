@@ -38,6 +38,7 @@ class run_qc():
         self.genotype = None
         
         self.data_stream_status = {'pkl' : [False, self._load_pkl_data],
+                                   'opto': [False, self._load_opto_data],
                                    'sync': [False, self._load_sync_data],
                                    'unit': [False, self._build_unit_table],
                                    'LFP': [False, self. _build_lfp_dict]
@@ -58,14 +59,15 @@ class run_qc():
         self.figure_prefix = self.paths['external_specimen_name'] + '_' + self.paths['datestring'] + '_'
 
         ### GET FILE PATHS TO SYNC AND PKL FILES ###
-        self.SYNC_FILE = self.paths['sync_file']
-        self.BEHAVIOR_PKL = self.paths['behavior_pkl']
-        self.REPLAY_PKL = self.paths['replay_pkl']
-        self.MAPPING_PKL = self.paths['mapping_pkl']
-        self.OPTO_PKL = self.paths['opto_pkl']
+        self.SYNC_FILE = self.paths.get('sync_file', 'none found')
+        self.BEHAVIOR_PKL = self.paths.get('behavior_pkl', 'none found')
+        self.REPLAY_PKL = self.paths.get('replay_pkl', 'none found')
+        self.MAPPING_PKL = self.paths.get('mapping_pkl', 'none found')
+        self.OPTO_PKL = self.paths.get('opto_pkl', 'none found')
+        
 
         for f,s in zip([self.SYNC_FILE, self.BEHAVIOR_PKL, self.REPLAY_PKL, self.MAPPING_PKL], ['sync: ', 'behavior: ', 'replay: ', 'mapping: ']):
-            print(s + f)
+            print(s+f)
         
         self.probe_dirs = [self.paths['probe'+pid] for pid in self.paths['data_probes']]
         self.lfp_dirs = [self.paths['lfp'+pid] for pid in self.paths['data_probes']]
@@ -104,7 +106,7 @@ class run_qc():
             return wrapper
         return decorator
 
-
+     
     def _load_sync_data(self): 
         self.syncDataset = sync_dataset(self.SYNC_FILE)
         vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
@@ -116,7 +118,12 @@ class run_qc():
         self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
         self.data_stream_status['sync'][0] = True
 
+    
+    def _load_opto_data(self):
+        
+        self.opto_data = pd.read_pickle(self.OPTO_PKL)
 
+        
     def _load_pkl_data(self):
         if not self.data_stream_status['sync'][0]:
             self._load_sync_data()
@@ -124,7 +131,7 @@ class run_qc():
         self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
         self.replay_data = pd.read_pickle(self.REPLAY_PKL)
-        self.opto_data = pd.read_pickle(self.OPTO_PKL)
+        #self.opto_data = pd.read_pickle(self.OPTO_PKL)
 
         self.trials = behavior_analysis.get_trials_df(self.behavior_data)
 
@@ -227,23 +234,28 @@ class run_qc():
             WHERE es.id = {}
             ORDER BY es.id
             '''
-
-        genotype_info = query_lims(query_string.format(self.paths['es_id']))
-        if len(genotype_info)>0 and 'specimen_name' in genotype_info[0]:
-            genotype_string = genotype_info[0]['specimen_name']
-            self.genotype = genotype_string[:genotype_string.rfind('-')]
-        else:
-            print('Could not find genotype for mouse {}'.format(self.paths['external_specimen_name']))
+        try:
+            genotype_info = query_lims(query_string.format(self.paths['es_id']))
+            if len(genotype_info)>0 and 'specimen_name' in genotype_info[0]:
+                genotype_string = genotype_info[0]['specimen_name']
+                self.genotype = genotype_string[:genotype_string.rfind('-')]
+            else:
+                print('Could not find genotype for mouse {}'.format(self.paths['external_specimen_name']))
+                self.genotype = ''
+        except Exception as e:
             self.genotype = ''
+            print('Error retrieving genotype: {}'.format(e))
 
 
     def _get_platform_info(self):
 
-        # read in platform json to get exp start time
-        platform_file = self.paths['EcephysPlatformFile']
-        with open(platform_file, 'r') as file:
-            self.platform_info = json.load(file)
-
+        # read in platform json
+        try:
+            platform_file = self.paths['EcephysPlatformFile']
+            with open(platform_file, 'r') as file:
+                self.platform_info = json.load(file)
+        except Exception as e:
+            print('Error getting platform json: {}'.format(e))
 
     def _get_agar_channels(self):
         
@@ -299,7 +311,16 @@ class run_qc():
         analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
         analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
 
-    
+
+    def probe_noise(self, data_chunk_size=1):
+        if self.probeinfo_dict is None:
+            self._build_probeinfo_dict()
+        
+        noise_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_noise')
+        analysis.plot_AP_band_noise(self.probe_dirs, self.probes_to_run, self.probeinfo_dict, 
+                                    noise_dir, data_chunk_size=data_chunk_size, prefix=self.figure_prefix)
+
+        
     def probe_yield(self):
         ### Plot Probe Yield QC ###
         if self.metrics_dict is None:
@@ -344,14 +365,15 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def receptive_fields(self):
+    def receptive_fields(self, save_rf_mat=False):
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
 
         ctx_units_percentile = 40 if not self.cortical_sort else 100
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
-                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, prefix=self.figure_prefix)
+                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, 
+                prefix=self.figure_prefix, save_rf_mat=save_rf_mat)
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
@@ -410,7 +432,7 @@ class run_qc():
                                      epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
 
     
-    @_module_validation_decorator(data_streams=['sync', 'pkl', 'unit'])
+    @_module_validation_decorator(data_streams=['sync', 'opto', 'unit'])
     def optotagging(self):
         ### Plot opto responses along probe ###
         opto_dir = os.path.join(self.FIG_SAVE_DIR, 'optotagging')
