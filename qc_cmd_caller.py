@@ -27,6 +27,23 @@ def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
               .format(r.errors))
     
 
+def parse_command_line_list(commandlist):
+
+    #if command line list is a string, unpack it into a python list
+    if '[' in commandlist:
+    
+        listcontents = commandlist[1:-1]
+        parts = listcontents.split(',')
+        #strip whitespaces from front and end of each entry
+        out = [p.lstrip().rstrip() for p in parts]
+    
+    #if commandlist wasn't actually a list just return it    
+    else:
+        out = commandlist
+    
+    return out
+
+
 if __name__ == "__main__":
     
     # run as standalone script
@@ -48,8 +65,9 @@ if __name__ == "__main__":
                     default='all')
     
     args = parser.parse_args()
+    modules_to_run = parse_command_line_list(args.modules_to_run)
     
-    call_qc(args.session, args.probes, args.cortical_sort, args.destination, args.modules_to_run)
+    call_qc(args.session, args.probes, args.cortical_sort, args.destination, modules_to_run)
         
     
     
