@@ -16,9 +16,12 @@ import pandas as pd
 sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7"]
 sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
+modules_to_run = 'all' #['probe_targeting', 'behavior']
+cortical_sort = False
 
 local_probe_dict_save_dir = r"C:\Data\NP_behavior_unit_tables"
 just_run_new_sessions = True
+run_only_missing_modules = True
 
 def find_new_sessions_to_run(sessions_to_run, destination):
     all_session_ids = [os.path.split(s)[-1] for s in sessions_to_run]
@@ -28,23 +31,53 @@ def find_new_sessions_to_run(sessions_to_run, destination):
     
     return [sessions_to_run[i] for i, d in enumerate(all_session_ids) if d not in dest_session_ids]
 
+
+def get_missing_modules(sessions_to_run, module_list):
+    
+    #if all modules are selected, populate list
+    if module_list == 'all':
+        module_list = [p for p in dir(run_qc) if not p[0]=='_']
+    
+    ignore_list = ['data_loss'] #hack since data_loss if part of probe_yield
+    session_missing_modules = {}
+    for s in sessions_to_run:
+        base = os.path.basename(s)
+        qc_dirname = os.path.join(destination, base)
+        qc_dirs = os.listdir(qc_dirname)
+        missing_modules = []
+        for m in module_list:
+            if m not in qc_dirs and m not in ignore_list:
+                missing_modules.append(m)
+        
+        session_missing_modules[s] = missing_modules
+    
+    return session_missing_modules
+    
+
 if just_run_new_sessions:
     sessions_to_run = find_new_sessions_to_run(sessions_to_run, destination)
 
-modules_to_run = 'all' #['probe_targeting', 'behavior']
-cortical_sort = False
+if run_only_missing_modules:
+    session_missing_modules = get_missing_modules(sessions_to_run, modules_to_run)
+
+
 failed = []
 session_errors = {}
 for ind, s in enumerate(sessions_to_run):
     
     session_name = os.path.basename(s)
-    print('\nRunning QC for session {}, {} in {} \n'
-          .format(session_name, ind+1, len(sessions_to_run)))
+    session_modules_to_run = session_missing_modules[s] \
+        if run_only_missing_modules else modules_to_run
+
+    print('\nRunning modules {} for session {}, {} in {} \n'
+          .format(session_modules_to_run,session_name, 
+                  ind+1, len(sessions_to_run)))
     
     try:
-        r=run_qc(s, destination, modules_to_run=modules_to_run, cortical_sort=cortical_sort)
+        
+        r=run_qc(s, destination, modules_to_run=session_modules_to_run, cortical_sort=cortical_sort)
         session_errors[s] = r.errors
-        pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
+        #pd.to_pickle(r.probe_dict, os.path.join(local_probe_dict_save_dir, session_name+'_unit_table.pkl'))
     
     except Exception as e:
         failed.append((s, e))
@@ -52,10 +85,6 @@ for ind, s in enumerate(sessions_to_run):
               .format(session_name, e))
     plt.close('all')
         
-
-
-
-
 
 
 

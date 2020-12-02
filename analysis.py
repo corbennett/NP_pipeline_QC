@@ -1147,7 +1147,7 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
             labelleft=False)
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.png'))
-        save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.plotly.json'))
+        #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.plotly.json'))
 
 def get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=10000):
     

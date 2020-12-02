@@ -80,6 +80,8 @@ class run_qc():
  
         self._get_genotype()
         self._get_platform_info()
+        self._make_specimen_meta_json()
+        self._make_session_meta_json()
 
         self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
@@ -122,6 +124,7 @@ class run_qc():
     def _load_opto_data(self):
         
         self.opto_data = pd.read_pickle(self.OPTO_PKL)
+        self.data_stream_status['opto'][0] = True
 
         
     def _load_pkl_data(self):
@@ -267,26 +270,33 @@ class run_qc():
             self.agar_channel_dict[pid] = analysis.find_agar_channels(self.probeinfo_dict[pid])
 
 
-    def make_specimen_meta_json(self):
+    def _make_specimen_meta_json(self):
+        
+        try:
+            meta = {}
+            meta['mid'] = self.paths['external_specimen_name']
+    
+            if self.genotype is None:
+                self._get_genotype()
+    
+            meta['genotype'] = self.genotype
+            analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'specimen_meta.json'))
+        except Exception as e:
+            print('Error making specimen meta json {}'.format(e))
+   
 
-        meta = {}
-        meta['mid'] = self.paths['external_specimen_name']
+    def _make_session_meta_json(self):
+        if not hasattr(self, 'behavior_data'):
+            self._load_pkl_data()
+        try:
+            meta = {}
+            meta['image_set'] = self.behavior_data['items']['behavior']['params']['stimulus']['params']['image_set']
+            meta['stage'] = self.behavior_data['items']['behavior']['params']['stage']
+            meta['operator'] = self.behavior_data['items']['behavior']['params']['user_id']
 
-        if self.genotype is None:
-            self._get_genotype()
-
-        meta['genotype'] = self.genotype
-        analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'specimen_meta.json'))
-
-
-    def make_session_meta_json(self):
-
-        meta = {}
-        meta['image_set'] = self.behavior_data['items']['behavior']['params']['stimulus']['params']['image_set']
-        meta['stage'] = self.behavior_data['items']['behavior']['params']['stage']
-        meta['operator'] = self.behavior_data['items']['behavior']['params']['user_id']
-
-        analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'session_meta.json'))
+            analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'session_meta.json'))
+        except Exception as e:
+            print('Error making session meta json {}'.format(e))
 
 
     @_module_validation_decorator(data_streams=['pkl', 'sync'])
@@ -300,8 +310,9 @@ class run_qc():
         analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 
                                     behavior_plot_dir, prefix=self.figure_prefix)
 
+
     @_module_validation_decorator(data_streams=['sync', 'pkl'])
-    def vsync(self):
+    def vsyncs(self):
         ### Plot vsync info ###
         vsync_save_dir = os.path.join(self.FIG_SAVE_DIR, 'vsyncs')
         analysis.plot_frame_intervals(self.vf, self.behavior_frame_count, self.mapping_frame_count, 
@@ -355,7 +366,7 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['sync'])
-    def probe_sync_alignment(self):
+    def probeSyncAlignment(self):
         ### Probe/Sync alignment
         probeSyncDir = os.path.join(self.FIG_SAVE_DIR, 'probeSyncAlignment')
         #analysis.plot_barcode_interval_hist(self.probe_dirs, self.syncDataset, probeSyncDir, prefix=self.figure_prefix)
@@ -377,7 +388,7 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def change_responses(self):
+    def change_response(self):
         if self.probe_dict is None:
             self._build_unit_table()
         analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, self.trials, 
@@ -385,7 +396,7 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'LFP'])
-    def lfp(self, agarChRange=None, num_licks=20, windowBefore=0.5, 
+    def LFP(self, agarChRange=None, num_licks=20, windowBefore=0.5, 
             windowAfter=1.5, min_inter_lick_time = 0.5, behavior_duration=3600):
 
         ### LFP ###
