@@ -15,9 +15,8 @@ import scipy.signal
 from matplotlib import pyplot as plt
 import datetime
 
-source_root = r'\\10.128.50.43\sd6.3'
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7"]
-sessionsToRun = get_sessions(sources, mouseID='!366122', start_date='20200801')#, end_date='20200922')
+sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2" ]
+sessionsToRun = get_sessions(sources, mouseID='!366122', start_date='20200930')#, end_date='20200922')
 destination_folder = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\rf_summary"
 
 #sessionsToRun = get_sessions(source_root, mouseID='!366122', rig='NP1', start_date='20200601')
@@ -30,9 +29,9 @@ for s in sessionsToRun:
     
     if len(rf_file)==0:
         print('running session {}'.format(s))
-        command_string = ['python', rf_script, s]
+        command_string = ['python', rf_script, s, '--save', '--save_dir', destination_folder]
         print(command_string)
-        subprocess.call(command_string)
+        subprocess.check_call(command_string)
     else:
         print('found existing rf file for session {}'.format(s))
         
@@ -44,19 +43,23 @@ sessions = [os.path.join(data_directory,s) for s in sessions if 'npy' in s]
 rf_summary = {p:{'peak_chan':[], 'rf_mats':[], 'session':[]} for p in 'ABCDEF'}
 for s in sessions:
     
-    with open(s, 'rb') as file:
-        rf_data = pickle.load(file)
-    
-    
+#    with open(s, 'rb') as file:
+#        rf_data = pickle.load(file)
+    rf_data = np.load(s, allow_pickle=True)
+    if not isinstance(rf_data, dict):
+         #weird hack to deal with the fact that some data was pickled 
+         #and some was np.saved (hidden pickle). Doing this somehow 
+         #rescues the latter data and returns a dict...
+        rf_data = rf_data.tolist()
+        
     for p in rf_data:
         peak_chan_key = 'peakChan' if 'peakChan' in rf_data[p] else 'peak_channel'
         rf_summary[p]['peak_chan'].append(rf_data[p][peak_chan_key])
         rf_summary[p]['rf_mats'].append(rf_data[p]['rfmat'])
         rf_summary[p]['session'].append(s)
-        
+   
 
-
-def get_rf_center_of_mass(rfmat, exp=1):
+def get_rf_center_of_mass(rfmat, exp=5):
     
     if rfmat.ndim>2:
         rfmat = np.mean(rfmat, axis=2)
@@ -121,7 +124,7 @@ for p in 'ABCDEF':
 #    ax.set_xlim([0, 8])
 #    ax.set_ylim([0, 8])    
 
-
+com_exp = 5
 for p in 'ABCDEF':
     fig, ax = plt.subplots()
     fig.suptitle(p)
@@ -130,10 +133,10 @@ for p in 'ABCDEF':
     session_dates = [int(sid.split('_')[-1][:8]) for sid in significant_rfs[p][1]]
     
     split_date = 20201001
-    coms =  [get_rf_center_of_mass(r, exp=5) for r, sess in zip(p_rfs, session_dates) if sess<split_date]
+    coms =  [get_rf_center_of_mass(r, exp=com_exp) for r, sess in zip(p_rfs, session_dates) if sess<split_date]
     ax.plot([c[0] for c in coms], [c[1] for c in coms], 'ko', alpha=0.3)
     
-    coms =  [get_rf_center_of_mass(r, exp=5) for r, sess in zip(p_rfs, session_dates) if sess>=split_date]
+    coms =  [get_rf_center_of_mass(r, exp=com_exp) for r, sess in zip(p_rfs, session_dates) if sess>=split_date]
     ax.plot([c[0] for c in coms], [c[1] for c in coms], 'ro', alpha=0.7)
     
     ax.set_aspect('equal')
@@ -148,7 +151,7 @@ for rf in p_rfs[:20]:
     
     fig, ax = plt.subplots()
     ax.imshow(np.mean(rf, axis=2))
-    com = get_rf_center_of_mass(rf, exp=5)
+    com = get_rf_center_of_mass(rf, exp=com_exp)
     ax.plot(com[0], com[1], 'ro')    
     
     

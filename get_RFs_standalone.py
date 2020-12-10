@@ -20,6 +20,7 @@ import pickle
 # sys.path.append("..")
 from sync_dataset import Dataset as sync_dataset
 import scipy.signal
+import argparse
 
 
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
@@ -178,7 +179,21 @@ def get_significant_rf(rfmat, nreps=1000, conv=2):
 if __name__ == "__main__":
     
     # run as standalone script
-    experiment_id = sys.argv[1]
+    print('trying to argparse')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("experiment_id")
+    parser.add_argument("--save", action="store_true")
+    parser.add_argument("--save_dir", default='')
+    
+    args = parser.parse_args()
+    
+    experiment_id = args.experiment_id
+    save_rf_npy = args.save
+    save_dir = args.save_dir
+    
+    if save_rf_npy:
+        print('rf mat will save to {}'.format(save_dir))
+    
     print(experiment_id)
     
     d = data_getters.local_data_getter(base_dir=experiment_id)
@@ -239,10 +254,11 @@ if __name__ == "__main__":
         
         probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
         rf_mat = get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, return_rfs=True, prefix=figure_prefix)
-        rf_save_dir = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\rf_summary"
-        with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:
-            pickle.dump(rf_mat, fp)
-        #np.save(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), rf_mat)
+        rf_save_dir = save_dir
+        if save_rf_npy:
+#        with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:
+#            pickle.dump(rf_mat, fp)
+            np.save(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), rf_mat)
     
     else:
         logging.error('Could not find mapping stim start frame')

@@ -51,7 +51,7 @@ def plot_trial_type_pie(trial_counts, labels, save_dir, prefix=''):
     fig.suptitle('trial types')
 
     def func(pct, allvals):
-        absolute = int(pct/100.*np.sum(allvals))
+        absolute = int(round(pct/100.*np.sum(allvals)))
         #return "{:.1f}%\n({:d})".format(pct, absolute)
         return str(absolute)
 

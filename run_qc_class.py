@@ -307,8 +307,8 @@ class run_qc():
         behavior_analysis.plot_trial_licks(self.trials, self.vf, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
         trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
-        analysis.plot_running_wheel(self.behavior_data, self.mapping_data, self.replay_data, 
-                                    behavior_plot_dir, prefix=self.figure_prefix)
+        pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
+        analysis.plot_running_wheel(pkl_list, behavior_plot_dir, prefix=self.figure_prefix)
 
 
     @_module_validation_decorator(data_streams=['sync', 'pkl'])
@@ -452,3 +452,32 @@ class run_qc():
 
         analysis.plot_opto_responses(self.probe_dict, self.opto_data, self.syncDataset, 
                                      opto_dir, prefix=self.figure_prefix, opto_sample_rate=10000)
+        
+        
+        
+
+
+class run_qc_hab(run_qc):
+    
+    def _load_pkl_data(self):
+        if not self.data_stream_status['sync'][0]:
+            self._load_sync_data()
+    
+        self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
+        self.trials = behavior_analysis.get_trials_df(self.behavior_data)
+
+        ### CHECK FRAME COUNTS ###
+
+        self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1
+        self.mapping_frame_count = 0 #self.mapping_data['intervalsms'].size + 1
+        self.replay_frame_count = 0 #self.replay_data['intervalsms'].size + 1
+
+#        # look for potential frame offsets from aborted stims
+        self.behavior_start_frame = probeSync.get_frame_offsets(self.syncDataset, [self.behavior_frame_count])[0]
+#
+        self.behavior_end_frame = self.behavior_start_frame + self.behavior_frame_count - 1
+ 
+        self.behavior_start_time = self.FRAME_APPEAR_TIMES[self.behavior_start_frame]
+        self.behavior_end_time = self.FRAME_APPEAR_TIMES[self.behavior_end_frame]
+
+        self.data_stream_status['pkl'][0] = True

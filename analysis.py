@@ -606,7 +606,11 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     
     
     
-def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, prefix=''):   
+def plot_running_wheel(pkl_list, FIG_SAVE_DIR, prefix=''):   
+    '''
+    INPUTS: pkl_list should be list of pkl data objects in the order in which
+    they were run.
+    '''
     
     ### Plot Running Wheel Data ###    
     rfig, rax = plt.subplots(2,1)
@@ -614,7 +618,7 @@ def plot_running_wheel(behavior_data, mapping_data, replay_data, FIG_SAVE_DIR, p
     rfig.suptitle('Running')
     time_offset = 0
     colors = ['k', 'g', 'r']
-    for ri, rpkl in enumerate([behavior_data, mapping_data, replay_data]):
+    for ri, rpkl in enumerate(pkl_list):
         key = 'behavior' if 'behavior' in rpkl['items'] else 'foraging'
         intervals = rpkl['items']['behavior']['intervalsms'] if 'intervalsms' not in rpkl else rpkl['intervalsms']
         time = np.insert(np.cumsum(intervals), 0, 0)/1000.
