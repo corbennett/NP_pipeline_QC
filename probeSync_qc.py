@@ -22,6 +22,7 @@ def getUnitData(probeBase,syncDataset):
     #Get barcodes/times from probe events and sync file
     be_t, be = get_ephys_barcodes(probeBase)
     bs_t, bs = get_sync_barcodes(syncDataset)
+    bs_t, bs = cut_bad_sync_barcodes(bs_t, bs)
     
     #Compute time shift between ephys and sync
     shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
@@ -62,7 +63,29 @@ def get_sync_barcodes(sync_dataset, fallback_line=0):
     bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
     
     return bs_t, bs
+
+
+def cut_bad_sync_barcodes(bs_t, bs):
     
+    if any(np.diff(bs_t)<30.95):
+        logging.warning('Detected bad barcode interval in sync, truncating data')
+        
+        #find bad barcodes
+        bad_intervals = np.where(np.diff(bs_t)<30.95)[0]
+        bad_barcode_indices = [bi+1 for bi in bad_intervals]
+        
+        #find largest block of good barcodes to use for probe sample rate/offet
+        bbi = np.insert(bad_barcode_indices, 0, 0)
+        bbi = np.append(bbi, len(bs_t))
+        good_block_sizes = np.diff(bbi)
+        largest_block = np.argmax(good_block_sizes)
+        barcode_interval_to_use = [bbi[largest_block], bbi[largest_block+1]-1]
+        
+        bs_t = bs_t[barcode_interval_to_use[0]:barcode_interval_to_use[1]]
+        bs = bs[barcode_interval_to_use[0]:barcode_interval_to_use[1]]
+    
+    return bs_t, bs
+
 
 def build_unit_table(probes_to_run, paths, syncDataset):
     ### GET UNIT METRICS AND BUILD UNIT TABLE ###
@@ -301,6 +324,79 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
     
     return start_frames
 
+
+def get_bad_vsync_indices(sync_dataset):
+    '''find bad vsyncs if the sync drops data'''
+    
+    bs_t, bs = get_sync_barcodes(sync_dataset)
+    barcode_intervals = np.diff(bs_t)
+    median_barcode_interval = np.median(barcode_intervals)
+    bad_intervals = np.where(barcode_intervals<30.95)[0]
+    
+    bad_barcode_indices = [bi+1 for bi in bad_intervals]
+    
+    
+    bad_barcode_intervals = []
+    for bi in bad_barcode_indices:
+        
+        #find last good barcode before bad one
+        last_good_barcode = bi
+        while last_good_barcode in bad_barcode_indices:
+            last_good_barcode = last_good_barcode - 1
+            
+        #find next good barcode after bad one
+        next_good_barcode = bi
+        while next_good_barcode in bad_barcode_indices:
+            next_good_barcode = next_good_barcode + 1
+        
+        bad_barcode_intervals.append([last_good_barcode, next_good_barcode])
+    
+    
+    #find the indices for the vsyncs that need to be interpolated
+    bad_synctime_intervals = [[bs_t[a], bs_t[b]] for a,b in bad_barcode_intervals]
+    time_lost_per_interval = [(b-a)*median_barcode_interval for a,b in bad_barcode_intervals]
+    vsyncs = get_vsyncs(sync_dataset)
+    vsync_patch_indices = [[np.searchsorted(vsyncs, a), np.searchsorted(vsyncs, b)] for a,b in bad_synctime_intervals]
+    
+    return vsync_patch_indices, time_lost_per_interval
+
+
+def patch_vsyncs(sync_dataset, behavior_data, mapping_data, replay_data):
+    
+    '''Hack to patch bad vsync intervals if sync drops data'''
+    
+    behavior_vsync_intervals = behavior_data['items']['behavior']['intervalsms']
+    mapping_vsync_intervals = mapping_data['intervalsms']
+    replay_vsync_intervals = replay_data['intervalsms']
+    
+    concatenated_intervals = np.concatenate((behavior_vsync_intervals, [np.nan], 
+                                             mapping_vsync_intervals, [np.nan],
+                                             replay_vsync_intervals))/1000.
+    vsyncs = get_vsyncs(sync_dataset)
+    vsync_intervals = np.diff(vsyncs)
+    
+    bad_vsync_indices, time_lost_per_interval = get_bad_vsync_indices(sync_dataset)
+    for bad_inds, time_lost in zip(bad_vsync_indices, time_lost_per_interval):
+        
+        bad_ind_start, bad_ind_end = bad_inds
+        
+        #cut out bad section
+        vsync_intervals = np.concatenate((vsync_intervals[:bad_ind_start], vsync_intervals[bad_ind_end:]))
+        
+        #paste in vsyncs from the pickle files
+        pkl_start_ind = bad_ind_start
+        pkl_end_ind = bad_ind_start
+        pkl_time = 0
+        while pkl_time<time_lost:
+            pkl_end_ind = pkl_end_ind + 1
+            pkl_time = np.sum(concatenated_intervals[pkl_start_ind:pkl_end_ind])
+        
+        vsync_intervals = np.insert(vsync_intervals, bad_ind_start, 
+                           concatenated_intervals[pkl_start_ind:pkl_end_ind])
+    
+    vsyncs_corrected = vsyncs[0] + np.cumsum(np.insert(vsync_intervals, 0, 0))
+    return vsyncs_corrected
+        
 
 def get_vsyncs(sync_dataset, fallback_line=2):
     

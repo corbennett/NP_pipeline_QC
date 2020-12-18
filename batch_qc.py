@@ -13,7 +13,7 @@ import pandas as pd
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7"]
+sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2"]
 sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
 modules_to_run = 'all' #['probe_targeting', 'behavior']
@@ -21,7 +21,7 @@ cortical_sort = False
 
 local_probe_dict_save_dir = r"C:\Data\NP_behavior_unit_tables"
 just_run_new_sessions = True
-run_only_missing_modules = True
+run_only_missing_modules = False
 
 def find_new_sessions_to_run(sessions_to_run, destination):
     all_session_ids = [os.path.split(s)[-1] for s in sessions_to_run]

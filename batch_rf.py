@@ -79,7 +79,7 @@ def get_rf_max_position(rfmat):
     
     return max_loc[1], max_loc[0]
 
-def get_significant_rf(rfmat, nreps=1000, conv=2):
+def get_significant_rf(rfmat, nreps=1000, conv=2, sig_percentile=95):
     
     if rfmat.ndim>2:
         rfmat = np.mean(rfmat, axis=2)
@@ -97,9 +97,9 @@ def get_significant_rf(rfmat, nreps=1000, conv=2):
         shuffled.append(unflat_conv)
     
     shuff_max = [s.max() for s in shuffled]
-    percentile_95 = np.percentile(shuff_max, 95)
+    percentile = np.percentile(shuff_max, sig_percentile)
     
-    return rf_conv.max() > percentile_95
+    return rf_conv.max() > percentile
     
 
 significant_rfs = {p:[[],[]] for p in 'ABCDEF'}
@@ -123,31 +123,34 @@ for p in 'ABCDEF':
 #    ax.set_aspect('equal')
 #    ax.set_xlim([0, 8])
 #    ax.set_ylim([0, 8])    
-
+area_dict = {'A': 'AM', 'B': 'PM', 'C': 'V1', 'D':'LM', 'E':'AL', 'F':'RL'}
 com_exp = 5
 for p in 'ABCDEF':
     fig, ax = plt.subplots()
-    fig.suptitle(p)
+    fig.suptitle(area_dict[p])
     
     p_rfs = significant_rfs[p][0]
     session_dates = [int(sid.split('_')[-1][:8]) for sid in significant_rfs[p][1]]
     
-    split_date = 20201001
+    split_date = 20201225
     coms =  [get_rf_center_of_mass(r, exp=com_exp) for r, sess in zip(p_rfs, session_dates) if sess<split_date]
-    ax.plot([c[0] for c in coms], [c[1] for c in coms], 'ko', alpha=0.3)
+    ax.plot([c[0] for c in coms], [c[1] for c in coms], 'ko', alpha=0.3, markeredgecolor='none')
     
     coms =  [get_rf_center_of_mass(r, exp=com_exp) for r, sess in zip(p_rfs, session_dates) if sess>=split_date]
     ax.plot([c[0] for c in coms], [c[1] for c in coms], 'ro', alpha=0.7)
     
     ax.set_aspect('equal')
     ax.set_xlim([0, 8])
-    ax.set_ylim([0, 8])   
+    ax.set_ylim([0, 8])
+    ax.xaxis.set_visible(False)
+    ax.yaxis.set_visible(False)
+    [ax.spines[loc].set_visible(False) for loc in ['top', 'bottom', 'left', 'right']]
     
     nowstring = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
     fig.savefig(os.path.join(data_directory, p + '_all_rfs_' + nowstring + '.png'))
 
-
-for rf in p_rfs[:20]:
+p_rfs = significant_rfs['A'][0]
+for rf in p_rfs[::50]:
     
     fig, ax = plt.subplots()
     ax.imshow(np.mean(rf, axis=2))

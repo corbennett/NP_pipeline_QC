@@ -256,9 +256,9 @@ if __name__ == "__main__":
         rf_mat = get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, return_rfs=True, prefix=figure_prefix)
         rf_save_dir = save_dir
         if save_rf_npy:
-#        with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:
-#            pickle.dump(rf_mat, fp)
-            np.save(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), rf_mat)
+            with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:
+                pickle.dump(rf_mat, fp)
+#            np.save(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), rf_mat)
     
     else:
         logging.error('Could not find mapping stim start frame')

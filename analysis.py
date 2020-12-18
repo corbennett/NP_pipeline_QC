@@ -555,7 +555,7 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
     
     lfig, lax = plt.subplots()
-    preTime = 0.05
+    preTime = 0.75
     postTime = 0.55
     for p in probe_dict:
         
@@ -683,7 +683,7 @@ def plot_unit_quality_hist(metrics_dict, FIG_SAVE_DIR, prefix=''):
     #fig.savefig(os.path.join(FIG_SAVE_DIR, 'unit_quality_hist.png'))
 
 
-def plot_unit_distribution_along_probe(metrics_dict, info_dict, FIG_SAVE_DIR, prefix=''):
+def plot_unit_distribution_along_probe(metrics_dict, info_dict, paths, FIG_SAVE_DIR, prefix=''):
     
     for ip, probe in enumerate(metrics_dict):
         p = metrics_dict[probe]
@@ -698,12 +698,16 @@ def plot_unit_distribution_along_probe(metrics_dict, info_dict, FIG_SAVE_DIR, pr
         goodhist = axes[1].hist(good_units['peak_channel'], bins=bins, color='g')
         noisehist = axes[1].hist(noise_units['peak_channel'], bins=bins, color='k', alpha=0.8)
         
+        kilosort_channel_map = np.load(paths['probe'+probe + '_channel_map'])
+        kilosort_mask = [np.isin(c, kilosort_channel_map) for c in np.arange(384)]
+
         mask = np.array(info_dict[probe]['mask']).astype(int)
         surface_channel = info_dict[probe]['surface_channel']
         axes[0].plot(np.arange(384), mask, 'k')
+        axes[0].plot(np.arange(384), kilosort_mask, 'g')
         axes[0].axis('off')
         axes[0].axvline(surface_channel)
-        axes[0].legend(['mask', 'surface'])
+        axes[0].legend(['kilosort in mask', 'kilosort out mask', 'surface'])
         
         axes[1].set_xlabel('peak channel')
         axes[1].set_ylabel('unit count')

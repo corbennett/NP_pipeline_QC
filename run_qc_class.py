@@ -118,6 +118,8 @@ class run_qc():
             MONITOR_LAG = 0.036
 
         self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+        self.MONITOR_LAG = MONITOR_LAG
+        self.vsyncs = self.vf
         self.data_stream_status['sync'][0] = True
 
     
@@ -152,7 +154,16 @@ class run_qc():
         print('frames in pkl files: {}'.format(self.total_pkl_frames))
         print('frames in sync file: {}'.format(len(self.vf)))
 
-        #assert(total_pkl_frames==len(vf))
+        try:
+            assert(self.total_pkl_frames==len(self.vf))
+        except AssertionError:
+            print('Mismatch between sync frames and pkl frames')
+            if len(self.vf) < self.total_pkl_frames:
+                print('Found fewer vsyncs than pkl frames, attempting to interpolate')
+                new_vsyncs = probeSync.patch_vsyncs(self.syncDataset, self.behavior_data, 
+                                                    self.mapping_data, self.replay_data)
+                self.vsyncs = new_vsyncs
+                self.FRAME_APPEAR_TIMES = self.vsyncs + self.MONITOR_LAG
 
         ### CHECK THAT REPLAY AND BEHAVIOR HAVE SAME FRAME COUNT ###
         print('frames in behavior stim: {}'.format(self.behavior_frame_count))
@@ -278,7 +289,7 @@ class run_qc():
     
             if self.genotype is None:
                 self._get_genotype()
-    
+            
             meta['genotype'] = self.genotype
             analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'specimen_meta.json'))
         except Exception as e:
@@ -288,12 +299,14 @@ class run_qc():
     def _make_session_meta_json(self):
         if not hasattr(self, 'behavior_data'):
             self._load_pkl_data()
+        
         try:
             meta = {}
             meta['image_set'] = self.behavior_data['items']['behavior']['params']['stimulus']['params']['image_set']
             meta['stage'] = self.behavior_data['items']['behavior']['params']['stage']
             meta['operator'] = self.behavior_data['items']['behavior']['params']['user_id']
-
+            meta['rig'] = self.platform_info['rig_id']
+            
             analysis.save_json(meta, os.path.join(self.FIG_SAVE_DIR, 'session_meta.json'))
         except Exception as e:
             print('Error making session meta json {}'.format(e))
@@ -304,7 +317,7 @@ class run_qc():
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
         behavior_analysis.plot_behavior(self.trials, behavior_plot_dir, prefix=self.figure_prefix)
-        behavior_analysis.plot_trial_licks(self.trials, self.vf, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
+        behavior_analysis.plot_trial_licks(self.trials, self.vsyncs, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
         trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
@@ -344,7 +357,7 @@ class run_qc():
             os.mkdir(probe_yield_dir)
 
         analysis.plot_unit_quality_hist(self.metrics_dict, probe_yield_dir, prefix= self.figure_prefix)
-        analysis.plot_unit_distribution_along_probe(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix= r'unit_distribution\\' + self.figure_prefix)
+        analysis.plot_unit_distribution_along_probe(self.metrics_dict, self.probeinfo_dict, self.paths, probe_yield_dir, prefix= r'unit_distribution\\' + self.figure_prefix)
         analysis.copy_probe_depth_images(self.paths, probe_yield_dir, prefix=r'probe_depth\\' + self.figure_prefix)
         analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
 

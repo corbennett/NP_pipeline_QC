@@ -6,7 +6,7 @@ Created on Tue Jun  9 14:33:49 2020
 """
 
 from psycopg2 import connect, extras
-import os, glob #, shutil
+import os, glob, json #, shutil
 from D1_local_schema import D1_schema as D1_local
 
 class data_getter():
@@ -253,6 +253,22 @@ class local_data_getter(data_getter):
         self.data_dict['es_id'] = basename.split('_')[0]
         self.data_dict['external_specimen_name'] = basename.split('_')[1]
         self.data_dict['datestring'] = basename.split('_')[2]
+        self.data_dict['rig'] = self.get_rig_from_platform()
+        
+    
+    def get_platform_info(self):
+        
+        platform_file = self.data_dict['EcephysPlatformFile']
+        with open(platform_file, 'r') as file:
+            self.platform_info = json.load(file)
+    
+    def get_rig_from_platform(self):
+        
+        if not hasattr(self, 'platform_info'):
+            self.get_platform_info()
+        
+        return self.platform_info['rig_id']
+        
         
     def get_probe_data(self):
         self.data_dict['data_probes'] = []
@@ -275,6 +291,9 @@ class local_data_getter(data_getter):
                 
                 info_json = glob_file(os.path.join(probe_base, '*probe_info*json'))
                 self.data_dict['probe' + probeID + '_info'] = info_json
+                
+                channel_map = glob_file(os.path.join(probe_base, r'continuous\Neuropix-PXI-100.0\channel_map.npy'))
+                self.data_dict['probe' + probeID + '_channel_map'] = channel_map
             
             if lfp_base is not None:
                 self.data_dict['lfp' + probeID] = lfp_base

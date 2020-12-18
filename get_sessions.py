@@ -14,12 +14,13 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, d
         10 digit lims ID, 6 digit mouseID and 8 digit date
         all separated by underscores: e.g. '1028864423_366122_20200608'
         
-    Applies up to three optional filters:
+    Applies up to four optional filters:
         mouseID: take only sessions from this mouse,
                 if mouseID starts with '!' then exclude this mouse
         start_date: take all dates on or after this;
                     date format needs to be 'YYYYMMDD'
         end_date: take all dates before or on this
+        rig: which rig experiment was run on ('NP0', 'NP1' most likely)
     ''' 
     if isinstance(root, list):
         in_dir = concatenate_lists([list_dir(r) for r in root])

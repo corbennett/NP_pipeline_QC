@@ -140,7 +140,7 @@ def main(mouse_id, opt_save_base, project_name, user_name, rig):
     opt_data_dir = get_opt_data_dir(mouse_id, opt_save_base)
     acquisition_date = get_acquisition_date(opt_data_dir)
     
-    ### specify where to save the trigger and platform files for our reference (these will get copied to hte lims incoming dir)
+    ### specify where to save the trigger and platform files for our reference (these will get copied to the lims incoming dir)
     platform_save_base = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\OPT_lims"
     platform_save_dir = os.path.join(platform_save_base, mouse_id)
     if not os.path.exists(platform_save_dir):
