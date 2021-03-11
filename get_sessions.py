@@ -60,7 +60,8 @@ def mouseID_filter(d, mouseID):
     d_mouseID = d_mouseID[1:-1]
 
     if mouseID[0]=='!':
-        return str(d_mouseID) != str(mouseID[1:])
+        bad_mouse_list = mouseID.split('!')
+        return str(d_mouseID) not in bad_mouse_list
     else:    
         return str(d_mouseID) == str(mouseID)
     

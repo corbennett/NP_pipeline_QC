@@ -10,10 +10,10 @@ from matplotlib import pyplot as plt
 import ecephys
 import pandas as pd
 import numpy as np
-import glob
-import os
+import glob, os, json
 import logging
-
+from xml.dom.minidom import parse
+import visual_behavior
 
 def getUnitData(probeBase,syncDataset):
 
@@ -120,6 +120,31 @@ def build_unit_table(probes_to_run, paths, syncDataset):
         
     return  {k:probe_dict[k] for k in successful_probes}
             
+
+def map_probe_from_slot_port(pinfo):
+    
+    probenames = [None, None,' ABC',' DEF']
+    slot = int(pinfo['slot'])
+    port = int(pinfo['port'])
+    
+    probename = probenames[slot][port]
+    return probename
+    
+
+def get_probe_settings_from_xml(xmlfilepath):
+    
+    settings = parse(xmlfilepath)
+    probes = settings.getElementsByTagName('PROBE')
+    probe_info_dict = {}
+    for probe in probes:
+        pinfo = {}
+        for attr in probe.attributes.items(): 
+            pinfo[attr[0]] = attr[1]
+            
+        probename = map_probe_from_slot_port(pinfo)
+        probe_info_dict[probename] = pinfo
+    
+    return probe_info_dict
 
     
 def get_sync_line_data(syncDataset, line_label=None, channel=None):
@@ -398,6 +423,17 @@ def patch_vsyncs(sync_dataset, behavior_data, mapping_data, replay_data):
     return vsyncs_corrected
         
 
+def get_running_from_pkl(pkl):
+    key = 'behavior' if 'behavior' in pkl['items'] else 'foraging'
+    intervals = pkl['items']['behavior']['intervalsms'] if 'intervalsms' not in pkl else pkl['intervalsms']
+    time = np.insert(np.cumsum(intervals), 0, 0)/1000.
+    
+    dx,vsig,vin = [pkl['items'][key]['encoders'][0][rkey] for rkey in ('dx','vsig','vin')]
+    run_speed = visual_behavior.analyze.compute_running_speed(dx[:len(time)],time,vsig[:len(time)],vin[:len(time)])
+    
+    return dx, run_speed
+    
+
 def get_vsyncs(sync_dataset, fallback_line=2):
     
     lines = sync_dataset.line_labels
@@ -408,9 +444,11 @@ def get_vsyncs(sync_dataset, fallback_line=2):
         if 'vsync' in line:
             vsync_line = line
     
+    rising_edges = sync_dataset.get_rising_edges(vsync_line, units='seconds')
     falling_edges = sync_dataset.get_falling_edges(vsync_line, units='seconds')
     
-    return falling_edges
+    #ignore the first falling edge if it isn't preceded by a rising edge
+    return falling_edges[falling_edges>rising_edges[0]]
         
 
 def get_stim_starts_ends(sync_dataset, fallback_line=5):
@@ -464,4 +502,58 @@ def get_lick_times(sync_dataset, fallback_line=31):
     lick_times = sync_dataset.get_rising_edges(lick_line, units='seconds')
     
     return lick_times
+
+
+### FUNCTIONS TO GET THE FRAME TIMES AND REMOVE DROPPED FRAMES
+def extract_lost_frames_from_json(cam_json):
+    
+    lost_count = cam_json['RecordingReport']['FramesLostCount']
+    if lost_count == 0:
+        return []
+    
+    lost_string = cam_json['RecordingReport']['LostFrames'][0]
+    lost_spans = lost_string.split(',')
+    
+    lost_frames = []
+    for span in lost_spans:
+        
+        start_end = span.split('-')
+        if len(start_end)==1:
+            lost_frames.append(int(start_end[0]))
+        else:
+            lost_frames.extend(np.arange(int(start_end[0]), int(start_end[1])+1))
+    
+    return np.array(lost_frames)-1 #you have to subtract one since the json starts indexing at 1 according to Totte
+    
+
+def get_frame_exposure_times(sync_dataset, cam_json):
+    
+    if isinstance(cam_json, str):
+        cam_json = read_json(cam_json)
+        
+    exposure_sync_line_label_dict = {
+            'Eye': 'eye_cam_exposing',
+            'Face': 'face_cam_exposing',
+            'Behavior': 'beh_cam_exposing'}
+    
+    cam_label =  cam_json['RecordingReport']['CameraLabel']
+    sync_line = exposure_sync_line_label_dict[cam_label]
+    
+    exposure_times = sync_dataset.get_rising_edges(sync_line, units='seconds')
+    
+    lost_frames = extract_lost_frames_from_json(cam_json)
+    
+    frame_times = [e for ie, e in enumerate(exposure_times) if ie not in lost_frames]
+    
+    return np.array(frame_times)
+
+
+
+def read_json(jsonfilepath):
+    
+    with open(jsonfilepath, 'r') as f:
+        contents = json.load(f)
+    
+    return contents
+    
     

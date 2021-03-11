@@ -5,14 +5,38 @@ Created on Thu Oct 22 18:26:10 2020
 @author: svc_ccg
 """
 
-from query_lims import query_lims
 import requests
 import os, json, glob
 import datetime
 import subprocess
 import shutil
 import argparse
+from psycopg2 import connect, extras
 
+
+def query_lims(query_string):
+    
+    con = connect(
+        dbname='lims2',
+        user='limsreader',
+        host='limsdb2',
+        password='limsro',
+        port=5432,
+        )
+    con.set_session(
+        readonly=True, 
+        autocommit=True,
+        )
+    cursor = con.cursor(
+        cursor_factory=extras.RealDictCursor,
+                )
+
+    
+    cursor.execute(query_string)
+    result = cursor.fetchall()
+    
+    return result
+    
 
 def get_opt_data_dir(mouse_id, save_base):
     

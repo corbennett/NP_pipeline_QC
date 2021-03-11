@@ -152,7 +152,7 @@ def calculate_probe_noise(datfilepath, chrange=[0, 384], sampleRate=30000,
 
 
 def plot_raw_AP_band(datachunk, probeID, probe_info_dict, FIG_SAVE_DIR, skip_interval = 20,
-                           sampleRate=30000, channelNumber=384, yrange=[-400, 400], prefix=''):
+                           sampleRate=30000, channelNumber=384, yrange=[-400, 400], prefix='', savefig=True):
     
     channels_to_plot = np.arange(0, datachunk.shape[1], skip_interval)
     num_channels = len(channels_to_plot)
@@ -179,8 +179,9 @@ def plot_raw_AP_band(datachunk, probeID, probe_info_dict, FIG_SAVE_DIR, skip_int
             ax.set_yticks([])
             ax.xaxis.set_visible(False)
             [ax.spines[pos].set_visible(False) for pos in ['right', 'top', 'left', 'bottom']]
-            
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + probeID + ' AP band raw snippet'))
+    
+    if savefig:        
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + probeID + ' AP band raw snippet'))
   
       
 def plot_AP_band_noise(probe_dirs, probes_to_run, probe_info_dicts, FIG_SAVE_DIR,
@@ -545,7 +546,39 @@ def vsync_report(syncDataset, total_pkl_frames, FIG_SAVE_DIR, prefix=''):
     
     save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'vsync_report.json'))
     
+
+def evoked_rates(probe_dict, behavior_data, behavior_start_frame, FRAME_APPEAR_TIMES):
+    draw_log = behavior_data['items']['behavior']['stimuli']['images']['draw_log']
+    flash_frames = np.where(draw_log)[0]
+    flash_starts = np.insert(np.where(np.diff(flash_frames)>1)[0]+1, 0, 0)
     
+    flash_start_frames = flash_frames[flash_starts]
+    flash_start_times = FRAME_APPEAR_TIMES[flash_start_frames+behavior_start_frame]
+    
+    preTime = 0.4
+    postTime = 0.3
+    presamples = int(preTime*1000)
+    for p in probe_dict:
+        u_df = probe_dict[p]
+        spikes = u_df['times']
+        sdfs = []
+        for s in spikes:
+            s = s.flatten()
+            sdf,t = plot_psth_change_flashes(flash_start_times, s, preTime=preTime, postTime=postTime)
+            sdfs.append(sdf)
+            
+        sdfs = np.array(sdfs)
+        baselines = np.mean(sdfs[:, presamples-300:presamples], 1)
+        response_peaks = np.mean(sdfs[:, presamples:presamples+100], 1)
+        evoked = response_peaks - baselines
+        
+        u_df['evoked'] = evoked
+        
+        probe_dict[p].update(u_df)
+    
+    return probe_dict
+   
+
 def plot_population_change_response(probe_dict, behavior_start_frame, replay_start_frame, 
                                     trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
@@ -605,8 +638,8 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     #lfig.savefig(os.path.join(FIG_SAVE_DIR, 'pop_change_response_latency_comparison.png'))
     
     
-    
-def plot_running_wheel(pkl_list, FIG_SAVE_DIR, prefix=''):   
+   
+def plot_running_wheel(pkl_list, FIG_SAVE_DIR, save_plotly=True, prefix=''):   
     '''
     INPUTS: pkl_list should be list of pkl data objects in the order in which
     they were run.
@@ -642,7 +675,8 @@ def plot_running_wheel(pkl_list, FIG_SAVE_DIR, prefix=''):
     rax[0].set_xlabel('Time (s)')
     
     save_figure(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.png'))
-    save_as_plotly_json(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.plotly.json'))
+    if save_plotly:
+        save_as_plotly_json(rfig, os.path.join(FIG_SAVE_DIR, prefix+'run_speed.plotly.json'))
     #rfig.savefig(os.path.join(FIG_SAVE_DIR, 'run_speed.png'))
 
 
@@ -732,6 +766,21 @@ def probe_yield_report(metrics_dict, info_dict, FIG_SAVE_DIR, prefix=''):
         report[probe]['num_masked_channels'] = int(np.sum(info['mask']))
   
     save_json(report, os.path.join(FIG_SAVE_DIR, prefix+'probe_yield_report.json'))
+    
+
+def all_spike_hist(probe_data):
+    
+    u_df = probe_data
+    good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+    
+    flatten = lambda l: [item[0] for sublist in l for item in sublist]
+    
+    spikes = flatten(good_units['times'].to_list())
+    binwidth = 1
+    bins = np.arange(0, np.max(spikes), binwidth)
+    hist, bin_e = np.histogram(spikes, bins)
+    
+    return hist, bin_e
     
 
 def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
@@ -1048,20 +1097,21 @@ def plot_unit_metrics(paths, FIG_SAVE_DIR, prefix=''):
             
             save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+m+'_unit_metrics.png'))
 
-def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix='', opto_sample_rate=10000):
+def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix='', opto_sample_rate=10000, save_opto_mats=False):
     
     opto_stim_table = get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=opto_sample_rate)
     levels = np.unique(opto_stim_table['trial_levels'])
     conds = np.unique(opto_stim_table['trial_conditions'])
     
     trial_start_times = opto_stim_table['trial_start_times']
-    
+    opto_mats_dict = {p:{} for p in probe_dict}
     for probe in probe_dict:
         u_df = probe_dict[probe]
         good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
         spikes = good_units['times']
         peakChans = good_units['peak_channel'].values
         unit_shank_order = np.argsort(peakChans)
+        opto_mats_dict[probe]['peak_channels'] = peakChans[unit_shank_order]
         
         fig = plt.figure(constrained_layout=True, facecolor='w')
         fig.set_size_inches([18,10])
@@ -1103,6 +1153,7 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
                 #bin_times = psths[0, 1, :]
                 psths = psths[unit_shank_order, 0, :].squeeze()
                 psths_baseline_sub = np.array([p-np.mean(p[:100]) for p in psths])   
+                opto_mats_dict[probe][str(cond) + '_' + str(level)] = psths_baseline_sub
                 ax = fig.add_subplot(gs[2*il+1:2*il+3, ic*10:(ic+1)*10])
                 im = ax.imshow(psths_baseline_sub, origin='lower', interpolation='none', aspect='auto')
                 ax.set_title('Level: {}'.format(level))
@@ -1156,6 +1207,11 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.png'))
         #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+probe+'_optoResponse.plotly.json'))
+        if save_opto_mats:
+            for probe in opto_mats_dict:
+                np.savez(os.path.join(FIG_SAVE_DIR, prefix+probe+'_optomat.npz'), **opto_mats_dict[probe])
+        
+        
 
 def get_opto_stim_table(syncDataset, opto_pkl, opto_sample_rate=10000):
     
@@ -1231,11 +1287,12 @@ def save_json(to_save, save_path):
 
 def save_figure(fig, save_path):
     
-    save_dir = os.path.dirname(save_path)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    
-    fig.savefig(save_path)
+    if save_path is not None:
+        save_dir = os.path.dirname(save_path)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        
+        fig.savefig(save_path)
 
 
 def save_as_plotly_json(fig, save_path):

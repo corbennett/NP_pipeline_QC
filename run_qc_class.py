@@ -86,7 +86,7 @@ class run_qc():
         self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
         
-
+    
     def _module_validation_decorator(data_streams):
         ''' Decorator to handle calling the module functions below and supplying
             the right data streams. 
@@ -99,11 +99,11 @@ class run_qc():
                         'LFP': LFP data, builds lfp table
         '''
         def decorator(module_func):
-            def wrapper(self):
+            def wrapper(self, **kwargs):
                 for d in data_streams:
                     if not self.data_stream_status[d][0]:
                         self.data_stream_status[d][1]()
-                module_func(self)
+                module_func(self, **kwargs)
         
             return wrapper
         return decorator
@@ -119,7 +119,7 @@ class run_qc():
 
         self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
         self.MONITOR_LAG = MONITOR_LAG
-        self.vsyncs = self.vf
+        self.vsync_times = np.copy(self.vf)
         self.data_stream_status['sync'][0] = True
 
     
@@ -162,8 +162,8 @@ class run_qc():
                 print('Found fewer vsyncs than pkl frames, attempting to interpolate')
                 new_vsyncs = probeSync.patch_vsyncs(self.syncDataset, self.behavior_data, 
                                                     self.mapping_data, self.replay_data)
-                self.vsyncs = new_vsyncs
-                self.FRAME_APPEAR_TIMES = self.vsyncs + self.MONITOR_LAG
+                self.vsync_times = new_vsyncs
+                self.FRAME_APPEAR_TIMES = self.vsync_times + self.MONITOR_LAG
 
         ### CHECK THAT REPLAY AND BEHAVIOR HAVE SAME FRAME COUNT ###
         print('frames in behavior stim: {}'.format(self.behavior_frame_count))
@@ -317,7 +317,7 @@ class run_qc():
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
         behavior_analysis.plot_behavior(self.trials, behavior_plot_dir, prefix=self.figure_prefix)
-        behavior_analysis.plot_trial_licks(self.trials, self.vsyncs, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
+        behavior_analysis.plot_trial_licks(self.trials, self.vsync_times, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
         trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
@@ -361,7 +361,7 @@ class run_qc():
         analysis.copy_probe_depth_images(self.paths, probe_yield_dir, prefix=r'probe_depth\\' + self.figure_prefix)
         analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
 
-
+    @_module_validation_decorator(data_streams=['unit'])
     def data_loss(self):
 
         probe_yield_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_yield')
@@ -457,20 +457,41 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['sync', 'opto', 'unit'])
-    def optotagging(self):
+    def optotagging(self, **kwargs):
         ### Plot opto responses along probe ###
         opto_dir = os.path.join(self.FIG_SAVE_DIR, 'optotagging')
         if self.probe_dict is None:
             self._build_unit_table()
 
         analysis.plot_opto_responses(self.probe_dict, self.opto_data, self.syncDataset, 
-                                     opto_dir, prefix=self.figure_prefix, opto_sample_rate=10000)
+                                     opto_dir, prefix=self.figure_prefix, opto_sample_rate=10000, **kwargs)
         
         
         
 
 
 class run_qc_hab(run_qc):
+    
+    def _module_validation_decorator(data_streams):
+        ''' Decorator to handle calling the module functions below and supplying
+            the right data streams. 
+            INPUT: 
+                data_streams: This should be a list of the data streams required
+                    by this module function. Options are (as of 10/30/2020):
+                        'pkl' : all the pkl files
+                        'sync': syncdataset
+                        'unit': kilosort data, builds unit table
+                        'LFP': LFP data, builds lfp table
+        '''
+        def decorator(module_func):
+            def wrapper(self):
+                for d in data_streams:
+                    if not self.data_stream_status[d][0]:
+                        self.data_stream_status[d][1]()
+                module_func(self)
+        
+            return wrapper
+        return decorator
     
     def _load_pkl_data(self):
         if not self.data_stream_status['sync'][0]:
@@ -479,18 +500,39 @@ class run_qc_hab(run_qc):
         self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
         self.trials = behavior_analysis.get_trials_df(self.behavior_data)
 
+        self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
+
         ### CHECK FRAME COUNTS ###
 
         self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1
-        self.mapping_frame_count = 0 #self.mapping_data['intervalsms'].size + 1
+        self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
         self.replay_frame_count = 0 #self.replay_data['intervalsms'].size + 1
+        
+        self.total_pkl_frames = (self.behavior_frame_count +
+                            self.mapping_frame_count +
+                            self.replay_frame_count) 
 
 #        # look for potential frame offsets from aborted stims
-        self.behavior_start_frame = probeSync.get_frame_offsets(self.syncDataset, [self.behavior_frame_count])[0]
+        (self.behavior_start_frame, self.mapping_start_frame) = probeSync.get_frame_offsets(self.syncDataset, 
+            [self.behavior_frame_count, self.mapping_frame_count])
+        
+        self.replay_start_frame = self.total_pkl_frames
 #
         self.behavior_end_frame = self.behavior_start_frame + self.behavior_frame_count - 1
  
         self.behavior_start_time = self.FRAME_APPEAR_TIMES[self.behavior_start_frame]
         self.behavior_end_time = self.FRAME_APPEAR_TIMES[self.behavior_end_frame]
-
+        
         self.data_stream_status['pkl'][0] = True
+        
+    
+    @_module_validation_decorator(data_streams=['pkl', 'sync'])
+    def behavior(self):
+        ### Behavior Analysis ###
+        behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
+        behavior_analysis.plot_behavior(self.trials, behavior_plot_dir, prefix=self.figure_prefix)
+        behavior_analysis.plot_trial_licks(self.trials, self.vsync_times, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
+        trial_types, counts = behavior_analysis.get_trial_counts(self.trials)
+        behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
+        pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
+        analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)

@@ -15,7 +15,7 @@ import datetime
 rigs_to_check = ['NP1', 'NP0']
 #source = r"\\10.128.50.43\sd6.3"
 #dest = r"\\10.128.50.43\sd6.3\lims validation"
-sources = [r"\\10.128.50.20\sd7", r"\\10.128.50.43\sd6.3"]
+sources = [r"\\10.128.50.20\sd7.2", r"\\10.128.50.20\sd7", r"\\10.128.50.43\sd6.3"]
 dest = os.path.join(r"\\10.128.50.20\sd7", 'lims_validation')
 
 if not os.path.exists(dest):
