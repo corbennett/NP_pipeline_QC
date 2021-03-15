@@ -124,6 +124,7 @@ def generate_behavior_stim_table(pkl_data, sync_dataset, frame_offset=0, block_o
     stim_table.loc[stim_table['omitted'], 'End'] = epoch_timestamps[stim_table[stim_table['omitted']]['end_frame'].astype(int)]    
     stim_table['common_name'] = 'behavior'
     
+    
     return stim_table
 
     
@@ -312,8 +313,9 @@ def build_full_NP_behavior_stim_table(behavior_pkl_path, mapping_pkl_path, repla
     stim_table_full = pd.concat([stim_table_behavior, stim_table_mapping, stim_table_replay], sort=False)
     stim_table_full.loc[:, 'duration'] = stim_table_full['End'] - stim_table_full['Start']
     stim_table_full.loc[stim_table_full['stimulus_name'].isnull(), 'stimulus_name'] = 'spontaneous'
+    stim_table_full['presentation_index'] = np.arange(len(stim_table_full))
     
-    return stim_table_full
+    return stim_table_full.set_index('presentation_index')
     
     
     

@@ -6,12 +6,14 @@ Created on Wed Dec 16 12:31:11 2020
 """
 import numpy as np
 from sync_dataset import Dataset as sync_dataset
-import visual_behavior
+from collections import OrderedDict
+import visual_behavior.analyze
 import pandas as pd
 import probeSync_qc as probeSync
 import data_getters
 import build_stim_tables
 import h5py
+from query_lims import query_lims
 
 class EcephysBehaviorSession():
     '''Get all data from a Visual Behavior Ecephys experiment.
@@ -22,23 +24,36 @@ class EcephysBehaviorSession():
     def from_lims(cls, ephys_experiment_id: int):
         file_paths = data_getters.lims_data_getter(exp_id=ephys_experiment_id)
         
-        return cls(experiment_info=file_paths.data_dict)
+        return cls(data_paths=file_paths.data_dict)
 
     
     @classmethod
     def from_local(cls, local_path: str, cortical_sort=False):
         file_paths = data_getters.local_data_getter(base_dir=local_path, cortical_sort=cortical_sort)
         
-        return cls(experiment_info=file_paths.data_dict)
+        return cls(data_paths=file_paths.data_dict)
 
+
+    @classmethod
+    def from_h5(cls, h5path: str):
+        
+        df_items = ['stim_table', 'unit_table']
+        
+        hdict = {}
+        hdf5_to_dict(hdict, filePath=h5path, grp=None, loadDict=None)
+        
+        for item in hdict:
+            if item in df_items:
+                hdict[item] = pd.DataFrame(hdict[item])
+                
+        return cls(data_paths=hdict['experiment_info'], loaddict=hdict)
+        
+        
  
-    def __init__(self, experiment_info=None):
+    def __init__(self, data_paths=None, loaddict={}):
         
-        self.experiment_info = experiment_info
+        self.data_paths = data_paths
         
-        self.experiment_id = self.experiment_info.get('es_id')
-        self.mouse_id = self.experiment_info.get('external_specimen_name')
-        self.rig_id = self.experiment_info.get('rig')
         
         self._sync = None
         self._behavior_data = None
@@ -46,22 +61,40 @@ class EcephysBehaviorSession():
         self._replay_data = None
         self._opto_data = None
         self._trials = None
-        self._unit_table = None
         self._lfp = None
-        self._stim_table = None
         self._stim_epochs = None
-        self._frame_times = None
-        self._lick_times = None
-        self._running_speed = None
-        self._cam_frame_times = None
-        self._opto_stim_table = None
+        self._experiment_info = loaddict.get('experiment_info')
+        self._frame_times = loaddict.get('frame_times')
+        self._reward_times = loaddict.get('reward_times')
+        self._unit_table = loaddict.get('unit_table')
+        self._stim_table = loaddict.get('stim_table')
+        self._lick_times = loaddict.get('lick_times')
+        self._running_speed = loaddict.get('running_speed')
+        self._cam_frame_times = loaddict.get('cam_frame_times')
+        self._opto_stim_table = loaddict.get('opto_stim_table')
+        
+    
+    @property
+    def experiment_info(self):
+        
+        if self._experiment_info is None:
+            self._experiment_info = self.data_paths
+            self._experiment_info['genotype'] = get_genotype(self.data_paths['es_id'])
+            self._experiment_info['monitor_lag'] = probeSync.get_monitor_lag(self.sync)
+            
+        return self._experiment_info
+    
+    
+    @experiment_info.setter
+    def experiment_info(self, value):
+        self._experiment_info = value
         
     
     @property
     def sync(self):
         
         if self._sync is None:
-            sync_file_path = self.experiment_info['sync_file']
+            sync_file_path = self.data_paths['sync_file']
             self._sync = sync_dataset(sync_file_path)
 
         return self._sync
@@ -76,7 +109,7 @@ class EcephysBehaviorSession():
     def behavior_data(self):
         
         if self._behavior_data is None:
-            self._behavior_data = get_pickle(self.experiment_info['behavior_pkl'])
+            self._behavior_data = get_pickle(self.data_paths['behavior_pkl'])
         
         return self._behavior_data
     
@@ -90,7 +123,7 @@ class EcephysBehaviorSession():
     def mapping_data(self):
         
         if self._mapping_data is None:
-            self._mapping_data = get_pickle(self.experiment_info['mapping_pkl'])
+            self._mapping_data = get_pickle(self.data_paths['mapping_pkl'])
         
         return self._mapping_data
     
@@ -104,7 +137,7 @@ class EcephysBehaviorSession():
     def replay_data(self):
         
         if self._replay_data is None:
-            self._replay_data = get_pickle(self.experiment_info['replay_pkl'])
+            self._replay_data = get_pickle(self.data_paths['replay_pkl'])
         
         return self._replay_data
     
@@ -118,7 +151,7 @@ class EcephysBehaviorSession():
     def opto_data(self):
         
         if self._opto_data is None:
-            self._opto_data = get_pickle(self.experiment_info['opto_pkl'])
+            self._opto_data = get_pickle(self.data_paths['opto_pkl'])
             
         return self._opto_data
     
@@ -128,27 +161,27 @@ class EcephysBehaviorSession():
         self._opto_data = value
         
     
-    @property
-    def trials(self) -> pd.DataFrame:
-        """A dataframe containing behavioral trial start/stop times, and trial
-        data of type: pandas.DataFrame"""
-        if self._trials is None:
-            self._trials = self.api.get_trials()
-        return self._trials
-
-    
-    @trials.setter
-    def trials(self, value):
-        self._trials = value
+#    @property
+#    def trials(self) -> pd.DataFrame:
+#        """A dataframe containing behavioral trial start/stop times, and trial
+#        data of type: pandas.DataFrame"""
+#        if self._trials is None:
+#            self._trials = self.api.get_trials()
+#        return self._trials
+#
+#    
+#    @trials.setter
+#    def trials(self, value):
+#        self._trials = value
         
     
     @property
     def unit_table(self):
 
-        probes_to_run = self.experiment_info['data_probes']
+        probes_to_run = self.data_paths['data_probes']
         if self._unit_table is None:
             self._unit_table = probeSync.build_unit_table(probes_to_run, 
-                                                          self.experiment_info, 
+                                                          self.data_paths, 
                                                           self.sync)
 
         return self._unit_table
@@ -178,7 +211,7 @@ class EcephysBehaviorSession():
     @property
     def lfp(self):
         
-        lfp_dirs = [self.experiment_info['lfp'+pid] for pid in self.experiment_info['data_probes']]
+        lfp_dirs = [self.data_paths['lfp'+pid] for pid in self.data_paths['data_probes']]
         if self._lfp is None:
             self._lfp = probeSync.build_lfp_dict(lfp_dirs, self.sync)
          
@@ -237,10 +270,12 @@ class EcephysBehaviorSession():
     def running_speed(self):
         
         if self._running_speed is None:
-            self._running_speed[0] = np.concatenate([get_running_from_pkl(pkl) for pkl in 
+            running_speed = np.concatenate([get_running_from_pkl(pkl) for pkl in 
                                [self.behavior_data, self.mapping_data, self.replay_data]])
     
-            self._running_speed[1] = self.frame_times
+            running_time = self.frame_times
+            
+            self._running_speed = [running_speed, running_time]
             
         return self._running_speed
 
@@ -261,7 +296,7 @@ class EcephysBehaviorSession():
         if self._cam_frame_times is None:
             self._cam_frame_times = {}
             for cam in eye_cam_dict:
-                cam_json = self.experiment_info.get(eye_cam_dict[cam] + 'Metadata')
+                cam_json = self.data_paths.get(eye_cam_dict[cam] + 'Metadata')
                 if cam_json:
                     cam_frame_times = probeSync.get_frame_exposure_times(self.sync, cam_json)
                     self._cam_frame_times[cam] = cam_frame_times
@@ -295,8 +330,7 @@ class EcephysBehaviorSession():
             self._reward_times = self.frame_times[reward_frames.astype(int)]
             
         return self._reward_times
-            
-    
+
     @reward_times.setter
     def reward_times(self, value):
         self._reward_times = value
@@ -330,14 +364,112 @@ def get_pickle(pickle_path):
     return pd.read_pickle(pickle_path)
 
 
-def save_to_h5(obj, savepath):
-    pass
+def save_to_h5(obj, savepath, attributes_to_save = ['unit_table',
+                          'stim_table',
+                          'opto_stim_table',
+                          'running_speed',
+                          'reward_times',
+                          'lick_times',
+                          'cam_frame_times',
+                          'experiment_info',
+                          'frame_times']):
     
     
+    with h5py.File(savepath,'a') as savefile:
+        
+        for a in attributes_to_save:
+            grp = savefile['/']
+            attr = getattr(obj, a)
+            if isinstance(attr, pd.DataFrame):
+                attr = attr.to_dict()
+            
+            if not isinstance(attr, dict):
+                attr = {a: attr}
+            
+            add_to_hdf5(savefile, grp=grp.create_group(a), saveDict=attr)
+        
+        savefile.close()
+        
+        
+def add_to_hdf5(savefile, grp=None, saveDict=None):
     
+    if grp is None:    
+        grp = savefile['/']
+        
+    for key in saveDict:
+        
+        if isinstance(saveDict[key],(dict,OrderedDict)):
+            print(grp.name)
+            subgrp = grp.create_group(str(key))
+            add_to_hdf5(savefile, grp=subgrp, saveDict=saveDict[key])
+        elif isinstance(saveDict[key], pd.DataFrame):
+            print(grp.name)
+            subgrp = grp.create_group(str(key))
+            add_to_hdf5(savefile, grp=subgrp, saveDict=saveDict[key].to_dict())
+        else:
+            try:
+                grp.create_dataset(str(key),data=saveDict[key],compression='gzip',compression_opts=1)
+            except:
+                try:
+                    grp[str(key)] = saveDict[key]
+                except:
+                    #try:
+                    grp.create_dataset(str(key),data=np.array(saveDict[key],dtype=object),dtype=h5py.special_dtype(vlen=str))
+#                    except:
+#                        print('Could not save: ', key)
+
+
+def hdf5_to_dict(parentdict, filePath=None, grp=None, loadDict=None):
+    if grp is None:
+        grp = h5py.File(filePath,'r')
+        newFile = grp
+    else:
+        newFile = None
+    for key,val in grp.items():
+        if isinstance(val,h5py._hl.dataset.Dataset):
+            v = val[()]
+            if isinstance(v,np.ndarray) and v.dtype==np.object:
+                v = v.astype('U')
+            if loadDict is None:
+                #setattr(obj,key,v)
+                parentdict[key] = v
+            else:
+                loadDict[key] = v
+        elif isinstance(val,h5py._hl.group.Group):
+            if loadDict is None:
+                #setattr(obj,key,{})
+                parentdict[key] = {}
+                hdf5_to_dict(parentdict,grp=val,loadDict=parentdict[key])
+            else:
+                loadDict[key] = {}
+                hdf5_to_dict(parentdict,grp=val,loadDict=loadDict[key])
+    if newFile is not None:
+        newFile.close()
+                
+
+def get_genotype(es_id):
+    query_string = '''
+        SELECT es.id as es_id, sp.name as specimen_name
+        FROM ecephys_sessions es
+        JOIN specimens sp ON sp.id = es.specimen_id
+        WHERE es.id = {}
+        ORDER BY es.id
+        '''
+    try:
+        genotype_info = query_lims(query_string.format(es_id))
+        if len(genotype_info)>0 and 'specimen_name' in genotype_info[0]:
+            genotype_string = genotype_info[0]['specimen_name']
+            genotype = genotype_string[:genotype_string.rfind('-')]
+        else:
+            print('Could not find genotype for session {}'.format(es_id))
+            genotype = ''
+    except Exception as e:
+        genotype = ''
+        print('Error retrieving genotype: {}'.format(e))
     
-    
-    
-    
-    
+    return genotype
+
+
+
+
     

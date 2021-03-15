@@ -48,7 +48,7 @@ def list_dir(root):
 def validate_session_dir(d):
     
     base = os.path.basename(d)
-    match = re.search('[0-9]{10}_[0-9]{6}_[0-9]{8}', base)
+    match = re.search('[0-9]{10}_[0-9]{6}_[0-9]{8}$', base)
     
     return match is not None
 

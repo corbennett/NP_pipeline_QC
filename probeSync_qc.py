@@ -109,16 +109,23 @@ def build_unit_table(probes_to_run, paths, syncDataset):
             units = pd.DataFrame.from_dict(units, orient='index')
             units['cluster_id'] = units.index.astype(int)
             units = units.set_index('cluster_id')
+#            units['probe'] = p
+#            units['uid'] = units['probe'] + units.index.astype(str)
             
             units = pd.merge(unit_metrics, units, left_index=True, right_index=True, how='outer')
+            units['probe'] = probe
+            units['uid'] = units['probe'] + units.index.astype(str)
+            units = units.set_index('uid')
             
             probe_dict[probe] = units
             successful_probes.append(probe)
         except Exception as E:
             logging.error(E)
+    
         
         
-    return  {k:probe_dict[k] for k in successful_probes}
+    #return  {k:probe_dict[k] for k in successful_probes}
+    return pd.concat([probe_dict[k] for k in successful_probes])
             
 
 def map_probe_from_slot_port(pinfo):
@@ -488,6 +495,16 @@ def get_diode_times(sync_dataset, fallback_line=4):
     falling_edges = sync_dataset.get_falling_edges(diode_line, units='seconds')
     
     return rising_edges, falling_edges
+
+
+def get_monitor_lag(syncDataset):
+
+    dioder, diodef = get_diode_times(syncDataset)
+    vf = get_vsyncs(syncDataset)
+    
+    lag = np.min([np.min(np.abs(d-vf[60])) for d in [diodef, dioder]])
+    
+    return lag
 
 
 def get_lick_times(sync_dataset, fallback_line=31):
