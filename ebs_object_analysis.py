@@ -9,7 +9,9 @@ from collections import OrderedDict
 import analysis
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
+import scipy.stats
 
 change_times = stim_table.loc[stim_table['change']==1, 'Start'].values
 
@@ -268,7 +270,32 @@ for ind, im in enumerate(image_list):
 ax.legend(image_list)
 
 
+def get_mean_change_response(df, image_list):
+    
+    crs = df.get('change_responses')
+    mean_cr = []
+    for ind, im in enumerate(image_list):
+        
+        all_cells = [c[ind] for c in crs]
+        mean_cr.append(np.mean(all_cells, axis=0))
+    
+    return mean_cr
+    
+def get_all_change_responses(df, image_list, orderbydepth=False):
+    
+    if orderbydepth:
+        crs = df.sort_values(by=['peak_channel'], ascending=False).get('change_responses')
+    else:
+        crs = df.get('change_responses')
+    all_cr = []
+    for ind, im in enumerate(image_list):
+        
+        all_cells = [c[ind] for c in crs]
+        all_cr.append(np.array(all_cells))
+    
+    return np.array(all_cr)
 
+  
 
 import EcephysBehaviorSession as ebs
 import os
@@ -281,7 +308,7 @@ failed_h5 = []
 for ih, h5 in enumerate(h5_list):
     
     try:
-        print('loading: {}'.format(h5))
+        print('loading: {}  {}/{}'.format(h5, ih, len(h5_list)))
         ee2 = ebs.EcephysBehaviorSession.from_h5(h5)
         image_list = np.sort(ee2.stim_table['image_name'].dropna().unique())
         ctx_inds = get_ctx_inds(ee2.unit_table)
@@ -301,23 +328,730 @@ for ih, h5 in enumerate(h5_list):
         ctx_df['date'] = ee2.experiment_info['datestring']
         ctx_df['image_list'] = [image_list]*len(ctx_df)
         
-        abbrev_ut = ctx_df.drop(columns=['times', 'template'])
+        abbrev_ut = ctx_df.drop(columns=['amplitudes', 'template'])
+        
+        stim_table = ee2.stim_table
+        stim_table['sessionID'] = ee2.experiment_info['es_id']
+        stim_table['mouseID'] = ee2.experiment_info['external_specimen_name']
+        
         
         if ih==0:
             combined_df = abbrev_ut.copy()
+            combined_stim_df = stim_table.copy()
         else:
             combined_df = pd.concat([combined_df, abbrev_ut])
+            combined_stim_df = pd.concat([combined_stim_df, stim_table])
+    
     except Exception as e:
         print('failed to add {} due to {}'.format(h5, e))
         failed_h5.append(h5)
 
 combined_df['unit_session_id'] = combined_df.index.astype(str) + combined_df['sessionID']
+combined_stim_df['stim_session_index'] = combined_stim_df.index.astype(str) + '_' + combined_stim_df['sessionID']
 
+### save combined DFs ###
 import h5py
-savepath = r"C:\Data\NP_pipeline_h5s\popdata3.h5"
+savepath = r"C:\Data\NP_pipeline_h5s\popdata_with_times.h5"
 with h5py.File(savepath,'a') as savefile:
-    
     grp = savefile['/']
     ebs.add_to_hdf5(savefile, grp=grp, saveDict=combined_df.set_index('unit_session_id').to_dict())
+
+savepath = r"C:\Data\NP_pipeline_h5s\popdata_stim_tables.h5"
+with h5py.File(savepath,'a') as savefile:
+    grp = savefile['/']
+    ebs.add_to_hdf5(savefile, grp=grp, saveDict=combined_stim_df.set_index('stim_session_index').to_dict())
+  
+
+### LOAD POPDATA FROM MEMORY ####
+loadfrommem = False
+if loadfrommem:
+    combined_df = {}
+    ebs.hdf5_to_dict(combined_df, r"C:\Data\NP_pipeline_h5s\popdata_with_times.h5")
+
+if loadfrommem:
+    combined_stim_df = {}
+    ebs.hdf5_to_dict(combined_stim_df, r"C:\Data\NP_pipeline_h5s\popdata_stim_tables.h5")
+
+
+### ANALYSIS ###
+g_image_list = combined_df.loc[combined_df['image_set'].str.contains('_G'),'image_list'].iloc[0]
+h_image_list = combined_df.loc[combined_df['image_set'].str.contains('_H'),'image_list'].iloc[0]
+
+g_cr = get_mean_change_response(combined_df.loc[combined_df['image_set'].str.contains('_G')], g_image_list)
+h_cr = get_mean_change_response(combined_df.loc[combined_df['image_set'].str.contains('_H')], h_image_list)
+
+fig, ax = plt.subplots()
+for c in g_cr:
+    ax.plot(c)
+ax.legend(g_image_list)
+
+fig, ax = plt.subplots()
+for c in h_cr:
+    ax.plot(c)
+ax.legend(h_image_list)
+
+def formataxes(ax, title=None, xLabel=None, yLabel=None, 
+               xTickLabels=None, yTickLabels=None, no_spines=False,
+               ylims=None, xlims=None, spinesToHide=None):
+    
+    if spinesToHide is None:
+        spinesToHide = ['right', 'top', 'left', 'bottom'] if no_spines else ['right', 'top']
+    for spines in spinesToHide:
+        ax.spines[spines].set_visible(False)
+
+    ax.tick_params(direction='out',top=False,right=False)
+    
+    if title is not None:
+        ax.set_title(title)
+    if xLabel is not None:
+        ax.set_xlabel(xLabel)
+    if yLabel is not None:
+        ax.set_ylabel(yLabel)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+    if xlims is not None:
+        ax.set_xlim(xlims)
+        
+
+## mean change response across all probes split by genotype/image set
+cr_dict = {}
+for genotype in combined_df['genotype'].unique():
+    cr_dict[genotype] = {}
+    for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+        
+        if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+            df_filter = ((combined_df['image_set'].str.contains(image_set)) &
+                        (combined_df['genotype']== genotype) &
+                        (combined_df['optotagged']))
+            
+        else:
+            df_filter = ((combined_df['image_set'].str.contains(image_set)) &
+                         (combined_df['optotagged']==False))
+        
+        
+        cr = get_mean_change_response(combined_df.loc[df_filter], image_list)
+        cr_dict[genotype][image_set] = cr
+
+
+
+for genotype in cr_dict:
+    fig, axes = plt.subplots(1,2)
+    for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+        
+        cr = cr_dict[genotype][image_set]
+        for ic, c in enumerate(cr):
+            if image_list[ic] in ['im083_r', 'im111_r']:
+                color = 'r'
+            elif image_list[ic] == 'omitted':
+                color = 'c'
+            else:
+                color = '0.5'
+            axes[ind].plot(c, color, alpha=0.5)
+
+        
+        axes[ind].legend(image_list)
+        axes[ind].set_title(genotype + ' ' + image_set)
+
+### Mean change response for genotype/probe/image set combos
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+probe_grouped = combined_df.groupby('probe')
+p_cr_dict = {}
+for probe, pgroup in probe_grouped:
+    
+    p_cr_dict[probe] = {}
+    for genotype in genotypes:
+        p_cr_dict[probe][genotype] = {}
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            
+            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                            (pgroup['genotype']== genotype) &
+                            (pgroup['optotagged']))
+                
+            elif genotype=='RS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']>=0.4))
+            elif genotype=='FS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']<0.4))
+            
+            cr = get_mean_change_response(pgroup.loc[df_filter&good_unit_filter], image_list)
+            p_cr_dict[probe][genotype][image_set]= {'cr':cr, 'unit_count':len(pgroup.loc[df_filter&good_unit_filter])}
+
+
+fig_save_path = r"C:\Users\svc_ccg\Desktop\Presentations\Tuesday Seminar 03232021"
+    
+for probe in p_cr_dict:
+    for genotype in genotypes:
+        fig, axes = plt.subplots(1,2)
+        fig.set_size_inches([12,8])
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            
+            cr = p_cr_dict[probe][genotype][image_set]['cr']
+            for ic, c in enumerate(cr):
+                if image_list[ic] in ['im083_r', 'im111_r']:
+                    color = 'r'
+                elif image_list[ic] == 'omitted':
+                    color = 'c'
+                else:
+                    color = '0.5'
+                axes[ind].plot(c, color, alpha=0.5)
+    
+            
+            #axes[ind].legend(image_list)
+            axes[ind].set_title(genotype + ' ' + image_set + ' ' + probe + ': ' + str(p_cr_dict[probe][genotype][image_set]['unit_count']) + ' units')
+        
+        miny = np.min([a.get_ylim()[0] for a in axes])
+        maxy = np.max([a.get_ylim()[1] for a in axes])
+        
+        [a.set_ylim([miny, maxy]) for a in axes]
+        
+        fig.savefig(os.path.join(fig_save_path, 'mean_image_response_' + probe + '_' + genotype + '_goodunits.png'))
+
+
+
+### Image response mat for all cells of each genotype/probe/image set combo
+fig_save_path = r"C:\Users\svc_ccg\Desktop\Presentations\Tuesday Seminar 03232021"
+
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+probe_grouped = combined_df.groupby('probe')
+p_crmat_dict = {}
+for probe, pgroup in probe_grouped:
+    
+    p_crmat_dict[probe] = {}
+    for genotype in genotypes:
+        p_crmat_dict[probe][genotype] = {}
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            
+            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            gtoh_filter = (pgroup['mouseID']!='548722')
+            if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                            (pgroup['genotype']== genotype) &
+                            (pgroup['optotagged']))
+                
+            elif genotype=='RS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']>=0.4))
+            elif genotype=='FS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']<0.4))
+            
+            crs = get_all_change_responses(pgroup.loc[df_filter&good_unit_filter&gtoh_filter], image_list, orderbydepth=True)
+            p_crmat_dict[probe][genotype][image_set] = crs
+
+common_ind_dict = {'_G': [5,6],
+                  '_H': [3,6]}
+other_ind_dict = {'_G': [0,1,2,3,4,7],
+                  '_H': [0,1,2,4,5,7]}
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+for probe in p_crmat_dict:
+    for genotype in genotypes:
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            for cat, cat_inds in zip(['common', 'other'], [common_ind_dict, other_ind_dict]):
+                cr = np.mean(p_crmat_dict[probe][genotype][image_set][cat_inds[image_set]], axis=0)
+                if len(cr)>0:
+                    cr_sorted = cr[np.argsort(np.max(cr[:, 1050:1150], axis=1))]
+                    
+                    fig, ax = plt.subplots()
+                    fig.suptitle(probe+' ' +genotype+' '+ image_set+ ' ' +cat)
+                    ax.imshow(cr_sorted[:,1000:1400], clim=[0,50], origin='lower')
+                    figname = probe+'_'+genotype+'_'+'cr_responsemat'+image_set+'.png'
+                    analysis.save_figure(fig, os.path.join(fig_save_path, 'cr_cell_mats\\'+figname))
+            plt.close('all')
+
+## plot CR responses to common and private images group by both sharedness and image set
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+image_set_colors = ['g', 'm']
+shared_colors = ['r', 'k']
+for probe in p_crmat_dict:
+    for genotype in genotypes:
+        fig, ax = plt.subplots(1,2)
+        fig.set_size_inches([12,8])
+        
+        ifig, iax = plt.subplots(1,2)
+        ifig.set_size_inches([12,8])
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            iax[ind].set_title(probe+' '+genotype+image_set)
+            for ic, (cat, cat_inds) in enumerate(zip(['common', 'private'], [common_ind_dict, other_ind_dict])):
+                cr = np.mean(p_crmat_dict[probe][genotype][image_set][cat_inds[image_set]], axis=0)
+                ax[ic].set_title(probe+' '+genotype+' '+cat)
+                
+                if len(cr)>0:
+                    time = np.arange(-1000,1000)
+                    cr = cr - np.mean(cr[:, 900:1000], axis=1)[:, None]
+                    cr_mean_over_cells = np.mean(cr, axis=0)
+                    cr_sem_over_cells = np.std(cr, axis=0)/(cr.shape[0])**0.5
+                    ax[ic].plot(time, cr_mean_over_cells, image_set_colors[ind])
+                    ax[ic].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                      cr_mean_over_cells-cr_sem_over_cells, color=image_set_colors[ind], alpha=0.5)
+                    formataxes(ax[ic], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                    
+                    iax[ind].plot(time, cr_mean_over_cells, shared_colors[ic])
+                    iax[ind].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                      cr_mean_over_cells-cr_sem_over_cells, color=shared_colors[ic], alpha=0.5)
+                    formataxes(iax[ind], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                    
+                    
+        miny = np.min([a.get_ylim()[0] for a in ax])
+        maxy = np.max([a.get_ylim()[1] for a in ax])
+        
+        [[a.set_ylim([miny, maxy]) for a in axes] for axes in [ax, iax]]
+        [[a.set_xlim([-100, 500]) for a in axes] for axes in [ax, iax]]
+        ax[0].legend(['G', 'H'])
+        iax[0].legend(['common', 'private'])
+        figname = probe + '_' + genotype + '_commonVsprivate_groupedbyshared.png'
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyshared\\'+figname))
+        ifigname = probe + '_' + genotype + '_commonVsprivate_groupedbyimageset.png'
+        analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset\\'+figname))
+            #plt.close(fig)
+        plt.close('all')
+
+## COLLAPSE ACROSS PROBES plot CR responses to common and private images group by both sharedness and image set
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+image_set_colors = ['g', 'm']
+shared_colors = ['r', 'k']
+for genotype in genotypes:
+    fig, ax = plt.subplots(1,2)
+    fig.set_size_inches([12,8])
+    
+    ifig, iax = plt.subplots(1,2)
+    ifig.set_size_inches([12,8])
+    for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+        iax[ind].set_title(genotype+image_set)
+        for ic, (cat, cat_inds) in enumerate(zip(['common', 'private'], [common_ind_dict, other_ind_dict])):
+            crs = [p_crmat_dict[probe][genotype][image_set][cat_inds[image_set]] for probe in 'ABCDEF']
+            crs = [cr for cr in crs if cr.size>0]
+            crs = np.concatenate(crs, axis=1)
+            cr = np.mean(crs, axis=0)
+            ax[ic].set_title(genotype+' '+cat)
+            
+            if len(cr)>0:
+                time = np.arange(-1000,1000)
+                cr = cr - np.mean(cr[:, 900:1000], axis=1)[:, None]
+                cr_mean_over_cells = np.mean(cr, axis=0)
+                cr_sem_over_cells = np.std(cr, axis=0)/(cr.shape[0])**0.5
+                ax[ic].plot(time, cr_mean_over_cells, image_set_colors[ind])
+                ax[ic].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                  cr_mean_over_cells-cr_sem_over_cells, color=image_set_colors[ind], alpha=0.5)
+                formataxes(ax[ic], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                
+                iax[ind].plot(time, cr_mean_over_cells, shared_colors[ic])
+                iax[ind].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                  cr_mean_over_cells-cr_sem_over_cells, color=shared_colors[ic], alpha=0.5)
+                formataxes(iax[ind], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                
+                
+    miny = np.min([a.get_ylim()[0] for a in ax])
+    maxy = np.max([a.get_ylim()[1] for a in ax])
+    
+    [[a.set_ylim([miny, maxy]) for a in axes] for axes in [ax, iax]]
+    [[a.set_xlim([-100, 500]) for a in axes] for axes in [ax, iax]]
+    ax[0].legend(['G', 'H'])
+    iax[0].legend(['common', 'private'])
+    figname = 'allprobes_' + genotype + '_commonVsprivate_groupedbyshared.png'
+    analysis.save_figure(fig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyshared\\'+figname))
+    ifigname = 'allprobes_' + genotype + '_commonVsprivate_groupedbyimageset.png'
+    analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset\\'+figname))
+        #plt.close(fig)
+    plt.close('all')
+
+#### PLOT RESPONSE TO OMISSION
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+image_set_colors = ['g', 'm']
+shared_colors = ['r', 'k']
+for probe in p_crmat_dict:
+    for genotype in genotypes:
+        fig, ax = plt.subplots()
+        fig.set_size_inches([6,6])
+        
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            iax[ind].set_title(probe+' '+genotype+image_set)
+            
+            omission_resp = p_crmat_dict[probe][genotype][image_set][-1]
+            ax.set_title(probe+' '+genotype+' '+cat)
+            
+            if len(omission_resp)>0:
+                time = np.arange(-1000,1000)
+                or_mean_over_cells = np.mean(omission_resp, axis=0)
+                or_sem_over_cells = np.std(omission_resp, axis=0)/(omission_resp.shape[0])**0.5
+                ax.plot(time, or_mean_over_cells, image_set_colors[ind])
+                ax.fill_between(time, or_mean_over_cells+or_sem_over_cells,
+                  or_mean_over_cells-or_sem_over_cells, color=image_set_colors[ind], alpha=0.5)
+                formataxes(ax, xLabel='Time from omission (s)', yLabel='Firing Rate (Hz)')
+                
+        ax.set_xlim([-400, 1000]) 
+        ax.legend(['G', 'H'])
+        
+        figname = probe + '_' + genotype + '_omission_response.png'
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'omission_response\\'+figname))
+        plt.close('all')
+
+
+
+### OPTO responses for all genotype/probe combos
+fig_save_path = r"C:\Users\svc_ccg\Desktop\Presentations\Tuesday Seminar 03232021"
+
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']
+probe_grouped = combined_df.groupby('probe')
+for probe, pgroup in probe_grouped:
+    
+    #opto_mat_dict[probe] = {}
+    for genotype in genotypes:
+        for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+            
+            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            
+            if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                            (pgroup['genotype']== genotype) &
+                            (pgroup['optotagged']))
+                
+            elif genotype=='RS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']>=0.4))
+            elif genotype=='FS':
+                df_filter = ((pgroup['image_set'].str.contains(image_set)) &
+                             (pgroup['optotagged']==False) &
+                             (pgroup['duration']<0.4))
+            
+            ors = pgroup.loc[df_filter&good_unit_filter].get('opto_responses')
+            
+            or_pulse = [o[int(len(o)/2)-1][0] for o in ors] 
+            or_sin = [o[-1][0] for o in ors]
+            
+            if len(or_pulse)>0:
+                fig, ax = plt.subplots(1,2)
+                fig.suptitle(probe+' '+genotype+' '+image_set)
+                ax[0].imshow(or_pulse, clim=[0, 50], aspect='auto')
+                ax[1].imshow(or_sin, clim=[0, 50], aspect='auto')
+                
+            fig.savefig(os.path.join(fig_save_path, probe+'_'+genotype+image_set+'_optotagged_response.png'))
+
+### Image responsiveness over probes/genotypes/image sets
+def calculate_sparseness(mean_response_vector):
+    '''lifetime sparseness as used in marina's biorxiv paper (defined by Gallant)
+    mean_response_vector (len n) should contain the trial mean of a cell's response 
+    (however defined) over n conditions
+    
+    for population sparseness, mean_response_vector should be the mean stimulus 
+    response of a population of n neurons
+    '''
+    
+    sumsquared = float(np.sum(mean_response_vector)**2)
+    sum_of_squares = float(np.sum(mean_response_vector**2))
+    n = float(mean_response_vector.size)
+    
+    try:
+        num = 1 - (1/n)*(sumsquared/sum_of_squares)
+        denom = 1 - (1/n)
+        
+        ls = num/denom
+    except:
+        ls = np.nan
+    
+    return ls
+
+
+
+def get_stimresponse_for_row(row, baseline_sub=True):
+    
+    crs = np.array(row['change_responses'])
+    stim_response = np.mean(crs[:, 1030:1130], axis=1)
+    if baseline_sub:
+        stim_response = stim_response - np.mean(crs[:, 900:1000], axis=1)
+    
+    return stim_response
+
+def get_stim_responsive_for_row(row):
+    
+    crs = np.array(row['change_responses'])
+    stim_response = np.mean(crs[:, 1030:1130], axis=1)
+    baseline_mean = np.mean(crs[:, 800:1000], axis=1)
+    baseline_std = np.std(crs[:, 800:1000], axis=1)
+    
+    #return any([s>bm+5*bs for s,bm,bs in zip(stim_response, baseline_mean, baseline_std)])
+    return np.array([s>bm+5*bs for s,bm,bs in zip(stim_response, baseline_mean, baseline_std)])
+    
+
     
     
+    #common_inds = common_ind_dict['_G'] if 'im012_r' in image_list else common_ind_dict['_H']
+    #other_inds = other_ind_dict['_G'] if 'im012_r' in image_list else other_ind_dict['_H']
+    
+#    sp = []
+#    for inds in [common_inds, other_inds]:
+#        cr = np.mean(crs[inds], axis=0)
+#        stim_response = np.mean(crs[inds, ])
+
+
+fig, ax = plt.subplots()
+for image_set in ['_G', '_H']:
+    cr = np.mean(p_crmat_dict['B']['RS'][image_set][other_ind_dict[image_set]], axis=0)
+    stim_response = np.mean(cr[:, 1050:1150], axis=1) - np.mean(cr[:, 900:1000], axis=1)
+    h, b = np.histogram(stim_response, np.arange(50))
+    h = h/np.sum(h)
+    ax.step(b[:-1], h, where='post')
+    #ax.hist(stim_response, bins=np.arange(-10, 50))
+    print('mean', np.mean(stim_response))
+    print(image_set, calculate_sparseness(stim_response)) 
+
+
+combined_df['stim_response_baseline_sub'] = combined_df.apply(get_stimresponse_for_row, axis=1)
+combined_df['stim_responsive'] = combined_df.apply(get_stim_responsive_for_row, axis=1)
+combined_df['cell_class'] = ''
+
+#ASSIGN CELL CLASSES TO CELLS
+combined_df.loc[(combined_df['genotype']=='Vip-IRES-Cre;Ai32')&combined_df['optotagged'], 'cell_class'] = 'VIP'
+combined_df.loc[(combined_df['genotype']=='Sst-IRES-Cre;Ai32')&combined_df['optotagged'], 'cell_class'] = 'SST'
+combined_df.loc[(combined_df['duration']>=0.4)&(combined_df['optotagged']==False), 'cell_class'] = 'RS'
+combined_df.loc[(combined_df['duration']<0.4)&(combined_df['optotagged']==False), 'cell_class'] = 'FS'
+
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+probe_grouped = combined_df.groupby('probe')
+for probe, pgroup in probe_grouped:
+
+    for genotype in genotypes:
+        good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+        gtoh_filter = (pgroup['mouseID']!='548722')
+        if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+            df_filter = (
+                        (pgroup['genotype']== genotype) &
+                        (pgroup['optotagged']))
+            
+        elif genotype=='RS':
+            df_filter = (
+                         (pgroup['optotagged']==False) &
+                         (pgroup['duration']>=0.4))
+        elif genotype=='FS':
+            df_filter = (
+                         (pgroup['optotagged']==False) &
+                         (pgroup['duration']<0.4))
+            
+        mouse_group = pgroup.loc[good_unit_filter&gtoh_filter&df_filter].groupby('mouseID')
+
+        sparse = [[], []]
+        frac_resp = [[],[]]
+        for mid, mgroup in mouse_group:
+            for imind, imageset in enumerate(['_G', '_H']):
+                stim = mgroup.loc[mgroup['image_set'].str.contains(imageset), 'stim_response_baseline_sub']
+                
+                if len(stim)>0:
+                    stim = np.array([np.mean(s[other_ind_dict[imageset]], axis=0) for s in stim])
+                    s = calculate_sparseness(stim)
+                else:
+                    s = np.nan
+                
+                sparse[imind].append(s)
+                
+        fig, ax = plt.subplots()
+        ax.plot(sparse[0], sparse[1], 'ko')
+        ax.plot([0,1], [0,1], 'k--')
+        ax.set_ylim([0,1])
+        ax.set_xlim([0,1])
+        ax.set_title(probe+' '+genotype)
+        ax.set_aspect('equal')
+        ax.text(0.01, 0.01, scipy.stats.wilcoxon(sparse[0], sparse[1])[1])
+        #print(probe+' '+genotype, scipy.stats.wilcoxon(sparse[0], sparse[1]))
+
+        
+        g_frac_resp = pgroup.loc[good_unit_filter&gtoh_filter&
+                                 df_filter&(pgroup['image_set'].str.contains('_G'))].groupby('mouseID').mean()['stim_responsive']
+        h_frac_resp = pgroup.loc[good_unit_filter&gtoh_filter&
+                                 df_filter&(pgroup['image_set'].str.contains('_H'))].groupby('mouseID').mean()['stim_responsive']
+        
+        if len(g_frac_resp)>0 and len(h_frac_resp)>0:
+            frac_resp = pd.merge(g_frac_resp, h_frac_resp, on='mouseID')
+            fig,ax = plt.subplots()
+            ax.plot(frac_resp['stim_responsive_x'], frac_resp['stim_responsive_y'], 'ko')
+            ax.set_ylim([0,1])
+            ax.set_xlim([0,1])
+            ax.plot([0,1], [0,1], 'k--')
+            ax.set_title(probe+' '+genotype)
+            ax.set_aspect('equal')
+            
+            
+good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1))
+gtoh_filter = (combined_df['mouseID']!='548722')
+new_g_order = np.array(['im036_r', 'im047_r', 'im012_r', 'im078_r', 'im044_r', 'im115_r', 'im083_r', 'im111_r', 'omitted'])
+new_h_order = np.array(['im104_r', 'im114_r', 'im024_r', 'im034_r', 'im087_r', 'im005_r', 'im083_r', 'im111_r', 'omitted'])
+new_g_inds = np.array([list(g_image_list).index(im) for im in new_g_order])
+new_h_inds = np.array([list(h_image_list).index(im) for im in new_h_order])
+
+for genotype in ('VIP', 'SST', 'RS', 'FS'):
+    fig, ax = plt.subplots()
+    fig.suptitle(genotype)
+    for setind, (image_set, iminds)  in enumerate(zip(('_G', '_H'), (new_g_inds, new_h_inds))):
+        
+        fraction_responsive = combined_df.loc[good_unit_filter&gtoh_filter&
+                                              (combined_df['cell_class']==genotype)&
+                                              (combined_df['image_set'].str.contains(image_set))].get('stim_responsive')
+        
+#        crs = combined_df.loc[good_unit_filter&gtoh_filter&
+#                                              (combined_df['cell_class']==genotype)&
+#                                              (combined_df['image_set'].str.contains(image_set))].get('change_responses')
+#        
+        fraction_responsive = np.stack(fraction_responsive)[:, iminds]
+        meanfr = np.mean(fraction_responsive, axis=0)
+        private_order = np.append(np.argsort(meanfr[:-3])[::-1], [6,7,8])
+        meanfr = meanfr[private_order]
+        
+        ax.plot(np.arange(6), meanfr[:-3], image_set_colors[setind]+'o', markerfacecolor='w', markersize=7)
+        ax.plot(np.arange(6,8), meanfr[-3:-1], image_set_colors[setind]+'o', markersize=7)
+        ax.plot(8, meanfr[-1], image_set_colors[setind]+'D', markersize=7)
+        
+        
+        error = [scipy.stats.binom.interval(0.95, p=fr, n=fraction_responsive.shape[0]) for fr in meanfr]
+        error = np.abs((np.array(error)/fraction_responsive.shape[0]) - meanfr[:, None])
+        error[meanfr==0] = 0 #don't show error bar for no observations
+        ax.errorbar(np.arange(9), meanfr, yerr=error.T, color=image_set_colors[setind], fmt='none')
+        
+        #ax.fill_between(np.arange(9), error[:, 0], error[:, 1], color=image_set_colors[setind], alpha=0.5)
+    
+    ax.set_xticks([2.5, 6.5, 8])
+    ax.set_xticklabels(['private', 'common', 'omitted'])
+    analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness\\allareas_' + genotype + '.png'))
+
+
+probe_grouped = combined_df.groupby('probe')
+for probe, pgroup in probe_grouped:
+    good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+    gtoh_filter = (pgroup['mouseID']!='548722')
+    for genotype in ('VIP', 'SST', 'RS', 'FS'):
+        
+        fig, ax = plt.subplots()
+        fig.suptitle(probe+' '+genotype)
+        for setind, (image_set, iminds)  in enumerate(zip(('_G', '_H'), (new_g_inds, new_h_inds))):
+            
+            fraction_responsive = pgroup.loc[good_unit_filter&gtoh_filter&
+                                                  (pgroup['cell_class']==genotype)&
+                                                  (pgroup['image_set'].str.contains(image_set))].get('stim_responsive')
+            
+            if fraction_responsive.shape[0]>0:
+                fraction_responsive = np.stack(fraction_responsive)[:, iminds]
+                meanfr = np.mean(fraction_responsive, axis=0)
+                private_order = np.append(np.argsort(meanfr[:-3])[::-1], [6,7,8])
+                meanfr = meanfr[private_order]
+                
+                ax.plot(np.arange(6), meanfr[:-3], image_set_colors[setind]+'o', markerfacecolor='w', markersize=7)
+                ax.plot(np.arange(6,8), meanfr[-3:-1], image_set_colors[setind]+'o', markersize=7)
+                ax.plot(8, meanfr[-1], image_set_colors[setind]+'D', markersize=7)
+                
+                
+                error = [scipy.stats.binom.interval(0.95, p=fr, n=fraction_responsive.shape[0]) for fr in meanfr]
+                error = np.abs((np.array(error)/fraction_responsive.shape[0]) - meanfr[:, None])
+                error[meanfr==0] = 0 #don't show error bar for no observations
+                ax.errorbar(np.arange(9), meanfr, yerr=error.T, color=image_set_colors[setind], fmt='none')
+                
+            #ax.fill_between(np.arange(9), error[:, 0], error[:, 1], color=image_set_colors[setind], alpha=0.5)
+        
+        ax.set_xticks([2.5, 6.5, 8])
+        ax.set_xticklabels(['private', 'common', 'omitted'])
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness\\'+probe+'_'+ genotype + '.png'))
+
+
+
+def change_responses_over_time_group(group):
+    sid = group.iloc[0]['sessionID']
+    stim_table = combined_stim_df.loc[combined_stim_df['sessionID']==sid]
+    change_times = stim_table.loc[(stim_table['change']==1)&(stim_table['active']), 'Start'].values
+    change_time_quartiles =  np.digitize(change_times, [change_times.min() + t for t in np.array([0.25, 0.5, 0.75, 1])*(change_times.max() - change_times.min())])
+    
+    qcrs = group.apply(lambda row: change_responses_over_time_group_row(row, change_times, change_time_quartiles), axis=1)
+    return qcrs
+
+
+def change_responses_over_time_group_row(row, change_times, change_time_quartiles):
+    qcrs = []
+    for q in np.arange(4):
+        qcts = change_times[change_time_quartiles==q]
+        psth = analysis.makePSTH_numba(row['times'], qcts-1, 2)
+        qcrs.append(psth[0])
+    return np.array(qcrs)
+
+
+def change_responses_over_time(row):
+    sid = row['sessionID']
+    stim_table = combined_stim_df.loc[combined_stim_df['sessionID']==sid]
+    change_times = stim_table.loc[(stim_table['change']==1)&(stim_table['active']), 'Start'].values
+    change_time_quartiles =  np.digitize(change_times, [change_times.min() + t for t in np.array([0.25, 0.5, 0.75, 1])*(change_times.max() - change_times.min())])
+    
+    qcrs = []
+    for q in np.arange(4):
+        qcts = change_times[change_time_quartiles==q]
+        psth = analysis.makePSTH_numba(row['times'], qcts-1, 2)
+        qcrs.append(psth[0])
+    return np.array(qcrs)
+        
+
+good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
+gtoh_filter = (combined_df['mouseID']!='548722')
+for genotype in genotypes:
+    
+    for image_set in ('_G', '_H'):
+        pgrouped = combined_df.loc[good_unit_filter&gtoh_filter&
+                         (combined_df['cell_class']==genotype)&
+                         (combined_df['image_set'].str.contains(image_set))].groupby('probe')
+    
+        for probe, pgroup in pgrouped:
+        
+            qcr = pgroup.groupby('sessionID').apply(change_responses_over_time_group)
+            if qcr.shape[0]==1:
+                qcr_stack = qcr.iloc[0]
+            else:
+                qcr_stack = np.stack(qcr)
+            fig, ax = plt.subplots()
+            fig.suptitle(probe+' '+genotype+image_set)
+            ax.plot(np.mean(qcr_stack, axis=0).T)
+            analysis.save_figure(fig, os.path.join(fig_save_path, 'cr_over_time\\' + probe+'_'+genotype+image_set+'_crbytimequartile.png'))
+        
+        
+depths = combined_df.groupby('sessionID').position.transform(lambda x: np.median(np.stack(x)[:, 1]) - np.stack(x)[:, 1])
+combined_df['depths'] = depths
+
+### spike width hists
+fig, axes = plt.subplots(5,1)
+colors = ['k', 'k', 'r', 'purple', 'g']
+for ind, (ax, color, genotype) in enumerate(zip(axes, colors, ['all', 'RS', 'FS', 'VIP', 'SST'])):
+    bins = np.linspace(0, 1, 73)
+    binwidth = bins[1]-bins[0]
+    if genotype=='all':
+        h,b = np.histogram(combined_df.loc[good_unit_filter].duration, bins=bins)
+        alpha=1
+    else:
+        h,b = np.histogram(combined_df.loc[good_unit_filter&(combined_df['cell_class']==genotype)].duration, bins=bins)
+        alpha=0.5
+    ax.bar(b[:-1], h, width=binwidth, color=color, alpha=alpha)
+    
+    if ind==len(axes)-1:
+        spinestohide=None
+        xlabel = 'trough to peak (ms)'
+        ylabel = 'unit count'
+    else:
+        spinestohide = ['top', 'bottom', 'right']
+        ax.set_xticks([])
+        xlabel=None
+        ylabel=None
+    formataxes(ax, xLabel=xlabel, yLabel=ylabel, spinesToHide=spinestohide)
+    ax.text(0, ax.get_ylim()[1]*0.5, genotype, fontdict={'color':color, 'size':12})
+analysis.save_figure(fig, os.path.join(fig_save_path, 'spikewidths_by_genotype.png'))  
+
+
+### plot example FS and RS waveforms
+fig, ax = plt.subplots()
+t = ctx_df.loc[ctx_df['duration']<0.3].iloc[2]['template']
+minchan = np.unravel_index(np.argmin(t), t.shape)
+ax.plot(t[:, minchan[1]], 'r', linewidth=2)
+formataxes(ax, no_spines=True)
+
+t = ctx_df.loc[ctx_df['duration']>0.45].iloc[3]['template']
+minchan = np.unravel_index(np.argmin(t), t.shape)
+ax.plot(t[:, minchan[1]], 'k', linewidth=2)
+formataxes(ax, no_spines=True)
+analysis.save_figure(fig, os.path.join(fig_save_path, 'example_FS_RS_waveforms.png'))
