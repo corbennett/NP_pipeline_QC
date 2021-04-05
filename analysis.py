@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.patches as mpatches
-import os, json, shutil
+import os, json, shutil, re
 import analysis
 from numba import njit
 import visual_behavior
@@ -22,6 +22,7 @@ import pandas as pd
 import plotly
 import plotly.tools as tls
 import scipy.signal
+import copy
 
 probe_color_dict = {'A': 'orange',
                         'B': 'r',
@@ -592,41 +593,45 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     postTime = 0.55
     for p in probe_dict:
         
-        u_df = probe_dict[p]
-        good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
-    #    max_chan = good_units['peak_channel'].max()
-    #    # take spikes from the top n channels as proxy for cortex
-    #    spikes = good_units.loc[good_units['peak_channel']>max_chan-num_channels_to_take_from_top]['times']
-        ctx_bottom_chan = np.percentile(good_units['peak_channel'], ctx_units_percentile)
-        spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]['times']
-        sdfs = [[],[]]
-        for s in spikes:
-            s = s.flatten()
-            if s.size>3600:
-                for icts, cts in enumerate([active_change_times, passive_change_times]): 
-                    sdf,t = analysis.plot_psth_change_flashes(cts, s, preTime=preTime, postTime=postTime)
-                    sdfs[icts].append(sdf)
-     
-        # plot population change response
-        fig, ax = plt.subplots()
-        title = p + ' population change response'
-        fig.suptitle(title)
-        ax.plot(t, np.mean(sdfs[0], axis=0), 'k')
-        ax.plot(t, np.mean(sdfs[1], axis=0), 'g')
-        ax.legend(['active', 'passive'])
-        ax.axvline(preTime, c='k')
-        ax.axvline(preTime+0.25, c='k')
-        ax.set_xticks(np.arange(0, preTime+postTime, 0.05))
-        ax.set_xticklabels(np.round(np.arange(-preTime, postTime, 0.05), decimals=2))
-        ax.set_xlabel('Time from change (s)')
-        ax.set_ylabel('Mean population response')
-        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png'))
-        #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+        try:
+            u_df = probe_dict[p]
+            good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+        #    max_chan = good_units['peak_channel'].max()
+        #    # take spikes from the top n channels as proxy for cortex
+        #    spikes = good_units.loc[good_units['peak_channel']>max_chan-num_channels_to_take_from_top]['times']
+            ctx_bottom_chan = np.percentile(good_units['peak_channel'], ctx_units_percentile)
+            spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]['times']
+            sdfs = [[],[]]
+            for s in spikes:
+                s = s.flatten()
+                if s.size>3600:
+                    for icts, cts in enumerate([active_change_times, passive_change_times]): 
+                        sdf,t = analysis.plot_psth_change_flashes(cts, s, preTime=preTime, postTime=postTime)
+                        sdfs[icts].append(sdf)
+         
+            # plot population change response
+            fig, ax = plt.subplots()
+            title = p + ' population change response'
+            fig.suptitle(title)
+            ax.plot(t, np.mean(sdfs[0], axis=0), 'k')
+            ax.plot(t, np.mean(sdfs[1], axis=0), 'g')
+            ax.legend(['active', 'passive'])
+            ax.axvline(preTime, c='k')
+            ax.axvline(preTime+0.25, c='k')
+            ax.set_xticks(np.arange(0, preTime+postTime, 0.05))
+            ax.set_xticklabels(np.round(np.arange(-preTime, postTime, 0.05), decimals=2))
+            ax.set_xlabel('Time from change (s)')
+            ax.set_ylabel('Mean population response')
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png'))
+            #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+            
+            mean_active = np.mean(sdfs[0], axis=0)
+            mean_active_baseline = mean_active[:int(preTime*1000)].mean()
+            baseline_subtracted = mean_active - mean_active_baseline
+            lax.plot(t, baseline_subtracted/baseline_subtracted.max(), c=probe_color_dict[p])
         
-        mean_active = np.mean(sdfs[0], axis=0)
-        mean_active_baseline = mean_active[:int(preTime*1000)].mean()
-        baseline_subtracted = mean_active - mean_active_baseline
-        lax.plot(t, baseline_subtracted/baseline_subtracted.max(), c=probe_color_dict[p])
+        except Exception as e:
+            print('Failed to run probe {} due to error {}'.format(p, e))
         
     lax.legend(probe_dict.keys())
     lax.set_xlim([preTime, preTime+0.1])
@@ -885,7 +890,8 @@ def plot_barcode_intervals(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
     pax = ax[:2]
     for ip, probe in enumerate(probe_dirs):
         
-        p_name = probe.split('_')[-2][-1]     
+        #p_name = probe.split('_')[-2][-1]     
+        p_name = re.findall('probe[A-F]', probe)[0][-1]
         be_t, be = probeSync.get_ephys_barcodes(probe)
         shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
         
@@ -1320,4 +1326,45 @@ def resize_image(image, fx=0.5, fy=0.5):
     return im_resized
     
     
+
+def search_pkl(pdict, item, level = [], found=False):
     
+    if item in pdict:
+        return level, True
+    
+    good_paths = []
+    for key in pdict:
+        klevel = copy.copy(level)
+        klevel.append(key)
+        if isinstance(pdict[key], dict):
+            
+            lv, fnd = search_pkl(pdict[key], item, klevel)
+            
+            if fnd:
+                good_paths.append(lv)
+                found = True
+     
+    good_paths = unpack_list(good_paths)
+    good_paths = [unpack_list(g, 0) for g in good_paths]
+    
+    return good_paths, found
+
+            
+def unpack_list(l, desired_depth=1):
+    
+    if len(l)>0:
+        depth = list_depth(l)
+        while depth > desired_depth:
+            l = l[0]
+            depth = depth-1
+    return l
+    
+           
+def list_depth(ll, depth=0):
+    
+    l = ll[0]
+    if isinstance(l, list):
+        depth = depth+1
+        depth = list_depth(l, depth)
+    
+    return depth

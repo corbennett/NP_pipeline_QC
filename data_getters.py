@@ -180,6 +180,9 @@ class lims_data_getter(data_getter):
             probeID = pb[-1]
             self.data_dict['data_probes'].append(probeID)
             self.data_dict['probe' + probeID] = pb
+            self.data_dict['lfp' + probeID] = pb
+            info_json = glob_file(os.path.join(pb, '*probe_info*json'))
+            self.data_dict['probe' + probeID + '_info'] = info_json
         
         raw = [p for p in probe_data if p['wkft']=='EcephysProbeRawData']
         name_suffix = {'probeA':'ABC', 'probeB':'ABC', 'probeC':'ABC', 'probeD':'DEF', 'probeE':'DEF', 'probeF':'DEF'}
@@ -202,7 +205,8 @@ class lims_data_getter(data_getter):
         wkf_dict = {
                 'StimulusPickle': 'mapping_pkl',
                 'EcephysReplayStimulus': 'replay_pkl',
-                'EcephysRigSync': 'sync_file'}
+                'EcephysRigSync': 'sync_file',
+                'OptoPickle': 'opto_pkl'}
         
         for wkf in wkf_dict:
             if wkf in self.data_dict:
@@ -310,7 +314,22 @@ class local_data_getter(data_getter):
                 self.data_dict['probe_depth_'+probeID] = probe_depth_image
              
         #GET OTHER IMAGE FILES
-        image_files = [k for k in D1_local if 'image' in k]
+        #image_files = [k for k in D1_local if 'image' in k]
+        image_files =  ['EcephysPostExperimentLeft',
+                        'EcephysPostExperimentRight',
+                        'EcephysPostInsertionLeft',
+                        'EcephysPostInsertionRight',
+                        'EcephysPostStimulusLeft',
+                        'EcephysPostStimulusRight',
+                        'EcephysPreExperimentLeft',
+                        'EcephysPreExperimentRight',
+                        'EcephysPreInsertionLeft',
+                        'EcephysPreInsertionRight',
+                        'EcephysInsertionLocationImage',
+                        'EcephysOverlayImage',
+                        'EcephysBrainSurfaceLeft',
+                        'EcephysBrainSurfaceRight']
+       
         for im in image_files:
             im_info = D1_local[im]
             im_file = glob_file(os.path.join(self.base_dir, im_info['rel_path']))

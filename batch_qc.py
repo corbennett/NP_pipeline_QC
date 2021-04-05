@@ -14,7 +14,7 @@ import pandas as pd
 #TODO: LOGGING!!! 
 
 sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", r"\\10.128.54.20\sd8"]
-sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200601')#, end_date='20200922')
+sessions_to_run = gs.get_sessions(sources, mouseID='!366122!548722', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
 modules_to_run = 'all' #['probe_targeting', 'behavior']
 cortical_sort = False
@@ -90,7 +90,7 @@ for ind, s in enumerate(sessions_to_run):
 
 
 failed_sessions = [   
-    '\\\\10.128.50.43\\sd6.3\\1028043324_498757_20200604',
+     '\\\\10.128.50.43\\sd6.3\\1028043324_498757_20200604',
      '\\\\10.128.50.43\\sd6.3\\1028225380_498757_20200605',
      '\\\\10.128.50.43\\sd6.3\\1029247206_498803_20200610',
      '\\\\10.128.50.43\\sd6.3\\1030489628_498756_20200617',

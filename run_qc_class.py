@@ -81,7 +81,7 @@ class run_qc():
         self._get_genotype()
         self._get_platform_info()
         self._make_specimen_meta_json()
-        self._make_session_meta_json()
+        #self._make_session_meta_json()
 
         self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
@@ -210,7 +210,11 @@ class run_qc():
       
     def _build_unit_table(self):
         ### BUILD UNIT TABLE ####
-        self.probe_dict = probeSync.build_unit_table(self.probes_to_run, self.paths, self.syncDataset)
+        probe_df = probeSync.build_unit_table(self.probes_to_run, self.paths, self.syncDataset)
+        self.probe_dict = {}
+        for p in probe_df['probe'].unique():
+            self.probe_dict[p] = probe_df.loc[probe_df['probe']==p]
+            
         self.data_stream_status['unit'][0] = True
 
 
@@ -361,7 +365,7 @@ class run_qc():
         analysis.copy_probe_depth_images(self.paths, probe_yield_dir, prefix=r'probe_depth\\' + self.figure_prefix)
         analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
 
-    @_module_validation_decorator(data_streams=['unit'])
+    @_module_validation_decorator(data_streams=['sync', 'unit'])
     def data_loss(self):
 
         probe_yield_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_yield')
@@ -427,7 +431,8 @@ class run_qc():
     def probe_targeting(self):
         
         targeting_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_targeting')
-        images_to_copy = ['insertion_location_image', 'overlay_image']
+        #images_to_copy = ['insertion_location_image', 'overlay_image']
+        images_to_copy = ['EcephysInsertionLocationImage', 'EcephysOverlayImage']
         analysis.copy_files(images_to_copy, self.paths, targeting_dir)
         self.probe_insertion_report = analysis.probe_insertion_report(self.paths['NewstepConfiguration'], 
                                         self.platform_info['ProbeInsertionStartTime'], self.platform_info['ExperimentStartTime'], 
@@ -440,6 +445,10 @@ class run_qc():
         images_to_copy = ['brain_surface_image_left', 'pre_insertion_surface_image_left', 
                           'post_insertion_surface_image_left','post_stimulus_surface_image_left',
                           'post_experiment_surface_image_left']
+        
+        images_to_copy = ['EcephysBrainSurfaceLeft', 'EcephysPreInsertionLeft',
+                          'EcephysPostInsertionLeft', 'EcephysPostStimulusLeft',
+                          'EcephysPostExperimentLeft']
     
         analysis.copy_images(images_to_copy, self.paths, brain_health_dir, 
                              x_downsample_factor=0.5, y_downsample_factor=0.5)

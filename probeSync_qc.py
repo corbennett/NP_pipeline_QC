@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 import ecephys
 import pandas as pd
 import numpy as np
-import glob, os, json
+import glob, os, json, re
 import logging
 from xml.dom.minidom import parse
 import visual_behavior
@@ -284,7 +284,8 @@ def build_lfp_dict(probe_dirs, syncDataset):
     lfp_dict = {}
 
     for ip, probe in enumerate(probe_dirs):
-        p_name = probe.split('_')[-2][-1]
+        #p_name = probe.split('_')[-2][-1]
+        p_name = re.findall('probe[A-F]', probe)[0][-1]
         
         lfp, time = getLFPData(probe, syncDataset)
         lfp_dict[p_name] = {'time': time, 'lfp': lfp}

@@ -12,6 +12,8 @@ from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 import scipy.stats
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
 
 change_times = stim_table.loc[stim_table['change']==1, 'Start'].values
 
@@ -550,7 +552,7 @@ common_ind_dict = {'_G': [5,6],
 other_ind_dict = {'_G': [0,1,2,3,4,7],
                   '_H': [0,1,2,4,5,7]}
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
-for probe in p_crmat_dict:
+for probe in ['C']:# p_crmat_dict:
     for genotype in genotypes:
         for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
             for cat, cat_inds in zip(['common', 'other'], [common_ind_dict, other_ind_dict]):
@@ -561,14 +563,14 @@ for probe in p_crmat_dict:
                     fig, ax = plt.subplots()
                     fig.suptitle(probe+' ' +genotype+' '+ image_set+ ' ' +cat)
                     ax.imshow(cr_sorted[:,1000:1400], clim=[0,50], origin='lower')
-                    figname = probe+'_'+genotype+'_'+'cr_responsemat'+image_set+'.png'
+                    figname = probe+'_'+genotype+'_'+'cr_responsemat'+image_set+'.pdf'
                     analysis.save_figure(fig, os.path.join(fig_save_path, 'cr_cell_mats\\'+figname))
             plt.close('all')
 
 ## plot CR responses to common and private images group by both sharedness and image set
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
-image_set_colors = ['g', 'm']
-shared_colors = ['r', 'k']
+image_set_colors = ['b', 'r']
+shared_colors = ['purple', 'g']
 for probe in p_crmat_dict:
     for genotype in genotypes:
         fig, ax = plt.subplots(1,2)
@@ -589,12 +591,12 @@ for probe in p_crmat_dict:
                     cr_sem_over_cells = np.std(cr, axis=0)/(cr.shape[0])**0.5
                     ax[ic].plot(time, cr_mean_over_cells, image_set_colors[ind])
                     ax[ic].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
-                      cr_mean_over_cells-cr_sem_over_cells, color=image_set_colors[ind], alpha=0.5)
+                      cr_mean_over_cells-cr_sem_over_cells, color=image_set_colors[ind], alpha=0.5, linewidth=0)
                     formataxes(ax[ic], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
                     
                     iax[ind].plot(time, cr_mean_over_cells, shared_colors[ic])
                     iax[ind].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
-                      cr_mean_over_cells-cr_sem_over_cells, color=shared_colors[ic], alpha=0.5)
+                      cr_mean_over_cells-cr_sem_over_cells, color=shared_colors[ic], alpha=0.5, linewidth=0)
                     formataxes(iax[ind], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
                     
                     
@@ -605,17 +607,17 @@ for probe in p_crmat_dict:
         [[a.set_xlim([-100, 500]) for a in axes] for axes in [ax, iax]]
         ax[0].legend(['G', 'H'])
         iax[0].legend(['common', 'private'])
-        figname = probe + '_' + genotype + '_commonVsprivate_groupedbyshared.png'
-        analysis.save_figure(fig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyshared\\'+figname))
-        ifigname = probe + '_' + genotype + '_commonVsprivate_groupedbyimageset.png'
-        analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset\\'+figname))
+        figname = probe + '_' + genotype + '_commonVsprivate_groupedbyshared.pdf'
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyshared_newcolors\\'+figname))
+        ifigname = probe + '_' + genotype + '_commonVsprivate_groupedbyimageset.pdf'
+        analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset_newcolors\\'+figname))
             #plt.close(fig)
         plt.close('all')
 
 ## COLLAPSE ACROSS PROBES plot CR responses to common and private images group by both sharedness and image set
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
-image_set_colors = ['g', 'm']
-shared_colors = ['r', 'k']
+image_set_colors = ['b', 'r']
+shared_colors = ['purple', 'g']
 for genotype in genotypes:
     fig, ax = plt.subplots(1,2)
     fig.set_size_inches([12,8])
@@ -663,8 +665,8 @@ for genotype in genotypes:
 
 #### PLOT RESPONSE TO OMISSION
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
-image_set_colors = ['g', 'm']
-shared_colors = ['r', 'k']
+image_set_colors = ['b', 'r']
+shared_colors = ['purple', 'g']
 for probe in p_crmat_dict:
     for genotype in genotypes:
         fig, ax = plt.subplots()
@@ -682,14 +684,14 @@ for probe in p_crmat_dict:
                 or_sem_over_cells = np.std(omission_resp, axis=0)/(omission_resp.shape[0])**0.5
                 ax.plot(time, or_mean_over_cells, image_set_colors[ind])
                 ax.fill_between(time, or_mean_over_cells+or_sem_over_cells,
-                  or_mean_over_cells-or_sem_over_cells, color=image_set_colors[ind], alpha=0.5)
+                  or_mean_over_cells-or_sem_over_cells, color=image_set_colors[ind], alpha=0.5, linewidth=0.0)
                 formataxes(ax, xLabel='Time from omission (s)', yLabel='Firing Rate (Hz)')
                 
         ax.set_xlim([-400, 1000]) 
         ax.legend(['G', 'H'])
         
-        figname = probe + '_' + genotype + '_omission_response.png'
-        analysis.save_figure(fig, os.path.join(fig_save_path, 'omission_response\\'+figname))
+        figname = probe + '_' + genotype + '_omission_response.pdf'
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'omission_response_newcolors\\'+figname))
         plt.close('all')
 
 
@@ -916,7 +918,7 @@ for genotype in ('VIP', 'SST', 'RS', 'FS'):
     
     ax.set_xticks([2.5, 6.5, 8])
     ax.set_xticklabels(['private', 'common', 'omitted'])
-    analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness\\allareas_' + genotype + '.png'))
+    analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness_newcolors\\allareas_' + genotype + '.pdf'))
 
 
 probe_grouped = combined_df.groupby('probe')
@@ -953,7 +955,7 @@ for probe, pgroup in probe_grouped:
         
         ax.set_xticks([2.5, 6.5, 8])
         ax.set_xticklabels(['private', 'common', 'omitted'])
-        analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness\\'+probe+'_'+ genotype + '.png'))
+        analysis.save_figure(fig, os.path.join(fig_save_path, 'image_responsiveness_newcolors\\'+probe+'_'+ genotype + '.pdf'))
 
 
 
@@ -1017,15 +1019,15 @@ combined_df['depths'] = depths
 
 ### spike width hists
 fig, axes = plt.subplots(5,1)
-colors = ['k', 'k', 'r', 'purple', 'g']
-for ind, (ax, color, genotype) in enumerate(zip(axes, colors, ['all', 'RS', 'FS', 'VIP', 'SST'])):
+colors = ['k', 'k', 'r', 'g', 'purple']
+for ind, (ax, color, genotype) in enumerate(zip(axes, colors, ['all', 'RS', 'FS', 'SST', 'VIP'])):
     bins = np.linspace(0, 1, 73)
     binwidth = bins[1]-bins[0]
     if genotype=='all':
-        h,b = np.histogram(combined_df.loc[good_unit_filter].duration, bins=bins)
+        h,b = np.histogram(combined_df.loc[good_unit_filter&combined_df['genotype'].str.contains('Sst')].duration, bins=bins)
         alpha=1
     else:
-        h,b = np.histogram(combined_df.loc[good_unit_filter&(combined_df['cell_class']==genotype)].duration, bins=bins)
+        h,b = np.histogram(combined_df.loc[good_unit_filter&combined_df['genotype'].str.contains('Sst')&(combined_df['cell_class']==genotype)].duration, bins=bins)
         alpha=0.5
     ax.bar(b[:-1], h, width=binwidth, color=color, alpha=alpha)
     
@@ -1040,7 +1042,7 @@ for ind, (ax, color, genotype) in enumerate(zip(axes, colors, ['all', 'RS', 'FS'
         ylabel=None
     formataxes(ax, xLabel=xlabel, yLabel=ylabel, spinesToHide=spinestohide)
     ax.text(0, ax.get_ylim()[1]*0.5, genotype, fontdict={'color':color, 'size':12})
-analysis.save_figure(fig, os.path.join(fig_save_path, 'spikewidths_by_genotype.png'))  
+analysis.save_figure(fig, os.path.join(fig_save_path, 'spikewidths_by_genotype_inSSTmice.png'))  
 
 
 ### plot example FS and RS waveforms
@@ -1055,3 +1057,147 @@ minchan = np.unravel_index(np.argmin(t), t.shape)
 ax.plot(t[:, minchan[1]], 'k', linewidth=2)
 formataxes(ax, no_spines=True)
 analysis.save_figure(fig, os.path.join(fig_save_path, 'example_FS_RS_waveforms.png'))
+
+
+novelty = []
+nerror = []
+context = []
+cerror = []
+for probe in ['C']:
+    for genotype in ['RS', 'FS', 'Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
+        
+        h_cr = np.array(p_crmat_dict[probe][genotype]['_H']['cr'])
+        g_cr = np.array(p_crmat_dict[probe][genotype]['_G']['cr'])
+        
+        stimmean = lambda x: np.mean(np.mean(x, axis=0)[:, 1050:1150], axis=1)
+        stimsem =  lambda x: np.std(np.mean(np.mean(x, axis=0)[:, 1050:1150], axis=1))/x.shape[1]**0.5
+        nov = np.mean(stim(h_cr[other_ind_dict['_H']]) - stim(h_cr[common_ind_dict['_H']])
+        con = stim(h_cr[common_ind_dict['_H']]) - stim(g_cr[common_ind_dict['_G']])
+        
+        novelty.append(nov)
+        context.append(con)
+        nerror.append(stimsem())
+
+fig, ax = plt.subplots(1,2)
+ax[0].plot(novelty, 'ko', ms=8)
+ax[1].plot(context, 'ko', ms=8)
+
+[a.set_xticks(np.arange(4)) for a in ax]
+[a.set_xticklabels(['RS', 'FS', 'VIP', 'SST']) for a in ax]
+ax[0].set_title('Novelty')
+ax[0].axhline(0, color='k', linestyle='dotted')
+ax[1].set_title('Context')
+ax[0].set_ylabel('Population Firing Rate Modulation')
+[formataxes(a) for a in ax]
+
+
+fig, ax = plt.subplots()
+ax.plot(novelty, 'ko', ms=8)
+ax.plot(context, 'ko', ms=8, markerfacecolor='w')
+
+ax.set_xticks(np.arange(4))
+ax.set_xticklabels(['RS', 'FS', 'VIP', 'SST'])
+ax.axhline(0, color='k', linestyle='dotted')
+ax.set_title('Novelty and Context modulation in V1')
+ax.set_ylabel('Population Firing Rate Modulation')
+formataxes(ax)
+ax.legend(['Novelty', 'Context'])
+
+
+
+
+# probe spike rates across all experiments
+good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
+gtoh_filter = (combined_df['mouseID']!='548722')
+flatten = lambda l: [item[0] for sublist in l for item in sublist]
+bins = np.arange(9000)
+session_grouped = combined_df.groupby('sessionID')
+ash = {'RS':[], 'FS':[], 'VIP':[], 'SST':[]}
+for cellclass in ash:
+            
+    grouptimes = flatten(combined_df[good_unit_filter&gtoh_filter&(combined_df['cell_class']==cellclass)]['times'])
+    
+    h,b = np.histogram(grouptimes, bins=bins)
+    ash[cellclass] = h
+        
+for g in ash:
+    fig, ax = plt.subplots()
+    ax.plot(bins[:-1], ash[g], 'k')
+    ax.axvline(3600)
+    ax.axvline(5130, color='g')
+    ax.set_title(g)
+
+
+
+bins = np.arange(9000)
+VIP_ash = {'RS':[], 'FS':[], 'VIP':[], 'SST':[]}
+for cellclass in ash:
+            
+    grouptimes = flatten(combined_df[good_unit_filter&gtoh_filter&
+                                     (combined_df['cell_class']==cellclass)&
+                                     (combined_df['genotype'].str.contains('Sst'))&
+                                     (combined_df['image_set'].str.contains('_G'))]['times'])
+    
+    h,b = np.histogram(grouptimes, bins=bins)
+    VIP_ash[cellclass] = h
+        
+for g in ash:
+    fig, ax = plt.subplots()
+    ax.plot(bins[:-1], VIP_ash[g], 'k')
+    ax.axvline(3600)
+    ax.axvline(5130, color='g')
+    ax.set_title(g)
+
+
+
+early_satiated = ['554013', '536211', '556016', '550324', '540536']
+late_satiated=['556014', '548721', '544835', '544836', '546507', '546508']
+
+bins = np.arange(9000)
+early_ash = {'RS':[], 'FS':[], 'VIP':[], 'SST':[]}
+late_ash = {'RS':[], 'FS':[], 'VIP':[], 'SST':[]}
+for cellclass in ash:
+    for sate_group, sate_dict in zip([early_satiated, late_satiated], [early_ash, late_ash]):        
+        grouptimes = flatten(combined_df[good_unit_filter&gtoh_filter&
+                                         (combined_df['cell_class']==cellclass)&
+                                         (combined_df['image_set'].str.contains('_G'))&
+                                         (combined_df['mouseID'].isin(sate_group))]['times'])
+        
+        h,b = np.histogram(grouptimes, bins=bins)
+        sate_dict[cellclass] = h
+
+colors = ['k', 'r']    
+for g in early_ash:
+    fig, ax = plt.subplots()
+    ax.set_title(g)
+
+    for color, sate_dict in zip(colors, [early_ash, late_ash]):
+        ax.plot(bins[:-1], np.convolve(sate_dict[g]/sate_dict[g].mean(), np.ones(10), 'same'), color)
+    
+    ax.axvline(3600)
+    ax.axvline(5130, color='g')
+
+g_early_runners = ['532246', '540536', '545996', '556014']
+
+bins = np.arange(9000)
+early_run_ash = {'RS':[], 'FS':[], 'VIP':[], 'SST':[]}
+for cellclass in ash:
+           
+    grouptimes = flatten(combined_df[good_unit_filter&gtoh_filter&
+                                     (combined_df['cell_class']==cellclass)&
+                                     (combined_df['image_set'].str.contains('_G'))&
+                                     (combined_df['mouseID'].isin(g_early_runners))]['times'])
+    
+    h,b = np.histogram(grouptimes, bins=bins)
+    early_run_ash[cellclass] = h
+
+colors = ['k', 'r']    
+for g in early_run_ash:
+    fig, ax = plt.subplots()
+    ax.set_title(g)
+
+    ax.plot(bins[:-1], np.convolve(early_run_ash[g]/early_run_ash[g].mean(), np.ones(10), 'same'), color)
+    
+    ax.axvline(3600)
+    ax.axvline(5130, color='g')
+
