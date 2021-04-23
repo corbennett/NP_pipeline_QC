@@ -86,6 +86,17 @@ for ind, s in enumerate(sessions_to_run):
     plt.close('all')
         
 
+#failed = []
+#for s in sessions_to_run:
+#    
+#    try:
+#        r=run_qc(s, destination, modules_to_run='none', cortical_sort=cortical_sort)
+#        r._make_session_meta_json()
+#    except:
+#        failed.append(s)
+
+
+
 
 
 

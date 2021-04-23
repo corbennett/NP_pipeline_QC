@@ -80,8 +80,8 @@ class run_qc():
  
         self._get_genotype()
         self._get_platform_info()
-        self._make_specimen_meta_json()
-        #self._make_session_meta_json()
+#        self._make_specimen_meta_json()
+#        self._make_session_meta_json()
 
         self.probes_to_run = [p for p in probes_to_run if p in self.paths['data_probes']]
         self._run_modules()
@@ -111,15 +111,19 @@ class run_qc():
      
     def _load_sync_data(self): 
         self.syncDataset = sync_dataset(self.SYNC_FILE)
-        vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
-        MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
-        if MONITOR_LAG>0.06:
-            self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
-            MONITOR_LAG = 0.036
-
-        self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
-        self.MONITOR_LAG = MONITOR_LAG
-        self.vsync_times = np.copy(self.vf)
+        
+        try:
+            vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
+            MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
+            if MONITOR_LAG>0.06:
+                self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
+                MONITOR_LAG = 0.036
+    
+            self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+            self.MONITOR_LAG = MONITOR_LAG
+            self.vsync_times = np.copy(self.vf)
+        except:
+            print('error getting vsync times')
         self.data_stream_status['sync'][0] = True
 
     
@@ -285,7 +289,7 @@ class run_qc():
             self.agar_channel_dict[pid] = analysis.find_agar_channels(self.probeinfo_dict[pid])
 
 
-    def _make_specimen_meta_json(self):
+    def make_specimen_meta_json(self):
         
         try:
             meta = {}
@@ -300,7 +304,7 @@ class run_qc():
             print('Error making specimen meta json {}'.format(e))
    
 
-    def _make_session_meta_json(self):
+    def make_session_meta_json(self):
         if not hasattr(self, 'behavior_data'):
             self._load_pkl_data()
         

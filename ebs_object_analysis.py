@@ -13,6 +13,13 @@ import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 import scipy.stats
 import matplotlib as mpl
+from numba import njit
+import sklearn
+from sklearn.model_selection import cross_validate, cross_val_score, cross_val_predict
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import LinearSVC
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+import warnings
 mpl.rcParams['pdf.fonttype'] = 42
 
 change_times = stim_table.loc[stim_table['change']==1, 'Start'].values
@@ -1071,7 +1078,7 @@ for probe in ['C']:
         
         stimmean = lambda x: np.mean(np.mean(x, axis=0)[:, 1050:1150], axis=1)
         stimsem =  lambda x: np.std(np.mean(np.mean(x, axis=0)[:, 1050:1150], axis=1))/x.shape[1]**0.5
-        nov = np.mean(stim(h_cr[other_ind_dict['_H']]) - stim(h_cr[common_ind_dict['_H']])
+        nov = np.mean(stim(h_cr[other_ind_dict['_H']]) - stim(h_cr[common_ind_dict['_H']]))
         con = stim(h_cr[common_ind_dict['_H']]) - stim(g_cr[common_ind_dict['_G']])
         
         novelty.append(nov)
@@ -1201,3 +1208,361 @@ for g in early_run_ash:
     ax.axvline(3600)
     ax.axvline(5130, color='g')
 
+
+
+
+############# DECODING ###############
+@njit     
+def makePSTH_numba_pertrial(spikes, startTimes, windowDur, binSize=0.001, convolution_kernel=0.05):
+    spikes = spikes.flatten()
+    startTimes = startTimes - convolution_kernel/2
+    windowDur = windowDur + convolution_kernel
+    bins = np.arange(0,windowDur+binSize,binSize)
+    convkernel = np.ones(int(convolution_kernel/binSize))
+    counts = np.zeros((len(startTimes), bins.size-1))
+    for i,start in enumerate(startTimes):
+        startInd = np.searchsorted(spikes, start)
+        endInd = np.searchsorted(spikes, start+windowDur)
+        counts[i] = np.histogram(spikes[startInd:endInd]-start, bins)[0]
+    
+ 
+    out = np.zeros((counts.shape[0], len(bins[:-convkernel.size-1])))
+    for ic in range(counts.shape[0]):
+        c = counts[ic]
+        c = np.convolve(c, convkernel)/(binSize*convkernel.size)
+        out[ic] = c[convkernel.size-1:-convkernel.size]
+    
+    return out, bins[:-convkernel.size-1]
+
+models = (RandomForestClassifier(n_estimators=100),LinearSVC(C=1.0,max_iter=1e4))
+
+good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
+gtoh_filter = (combined_df['mouseID']!='548722')
+
+session_ids = combined_df.loc[gtoh_filter]['sessionID'].unique()
+session_image_labels = {}
+session_change_labels = {}
+session_predictions = {}
+for ind, this_session_id in enumerate(session_ids):
+    
+    try:
+        print('running for session {}, {} in {}'.format(this_session_id, ind, len(session_ids)))
+        
+        session_df = combined_df.loc[(combined_df['sessionID']==this_session_id)&good_unit_filter&gtoh_filter]   
+        session_stim_table = combined_stim_df.loc[combined_stim_df['sessionID']==this_session_id].sort_values('Start')
+        
+        change_indices = session_stim_table[(session_stim_table['change']==1)&(session_stim_table['active'])].index.values
+        prechange_indices = [str(int(c)-1) for c in change_indices]
+        all_indices = np.concatenate((prechange_indices, change_indices))
+        
+        pc_df = session_stim_table.loc[all_indices]
+        image_times = pc_df['Start'].values
+        image_labels = pc_df['image_name'].values
+        change_labels = pc_df['change'].values
+        session_image_labels[this_session_id] = image_labels
+        session_change_labels[this_session_id] = change_labels
+        
+        pc_responses = session_df.apply(lambda row: makePSTH_numba_pertrial(row['times'], image_times, 0.2, binSize=0.005, convolution_kernel=0.01), axis=1)
+        session_df['changeAndPre_responses'] = pc_responses
+        
+        session_predictions[this_session_id] = {}
+        probe_score = {a:{} for a in 'ABCDEF'}
+        warnings.filterwarnings('ignore')
+        probe_win_score = []
+        for probe in session_df['probe'].unique():
+            
+            #change_response_array = np.array([c[0] for c in change_responses])
+            response_array = np.array(session_df.loc[session_df['probe']==probe]['changeAndPre_responses'])
+            response_array = np.array([c[0] for c in response_array])
+            
+            
+            for labelname, labels in zip(['image', 'change'], [image_labels, change_labels]):
+                win_score = []
+                for window in np.arange(40):
+                    trial_response_array = np.array([response_array[:, trial, :window+1] for trial in range(len(change_labels))])
+                    nsamples, nx, ny = trial_response_array.shape
+                    trial_response_array_reshape = trial_response_array.reshape((nsamples, nx*ny))
+                    predictions = cross_val_predict(models[1], trial_response_array_reshape, labels, cv=3)
+                    #score = np.sum(predictions==labels)/len(labels)
+                    win_score.append(predictions)
+                
+                probe_score[probe][labelname] = win_score
+                #ax.plot(0.005*np.arange(40), win_score)
+        
+            session_predictions[this_session_id]=probe_score
+        
+    except:
+        print('failed to run session {}'.format(this_session_id))
+
+########### take G and H days together#############
+all_session_probe_score = {a:{b:[] for b in ['image', 'change']} for a in 'ABCDEF'}
+for this_session_id in session_predictions:
+    
+    probe_score = session_predictions[this_session_id]
+    imlabels = session_image_labels[this_session_id]
+    chlabels = session_change_labels[this_session_id]
+            
+    for probe in probe_score:
+#        fig, ax = plt.subplots()
+#        fig.suptitle(probe)
+        if isinstance(probe_score[probe], dict):
+            scores = [[np.sum(preds==labels)/len(labels) for preds in probe_score[probe][labelname]] for labelname,labels in zip(['image', 'change'], [imlabels, chlabels])]
+            all_session_probe_score[probe]['image'].append(scores[0])
+            all_session_probe_score[probe]['change'].append(scores[1])
+#        ax.plot(0.005*np.arange(40), scores[0], 'k')
+#        ax2 = ax.twinx()
+#        ax2.plot(0.005*np.arange(40), scores[1], 'k--')
+
+probe_colors = ['r', 'orange', 'k', 'g', 'b', 'purple']
+fig, axall = plt.subplots(1,2)
+for ip, probe in enumerate('ABCDEF'):
+    fig, ax = plt.subplots()
+    fig.suptitle(probe)
+    
+    mean_score = [np.mean(all_session_probe_score[probe][label], axis=0) for label in ['image', 'change']]
+    sem_score = [np.std(all_session_probe_score[probe][label], axis=0)/len(all_session_probe_score[probe][label])**0.5 for label in ['image', 'change']]
+    
+    ax.plot(0.005*np.arange(40), mean_score[0], 'k')
+    ax.fill_between(0.005*np.arange(40), mean_score[0]+sem_score[0], mean_score[0]-sem_score[0], color='k', alpha=0.3)
+    ax2 = ax.twinx()
+    ax2.plot(0.005*np.arange(40), mean_score[1], 'g')
+    ax2.fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color='g', alpha=0.3)
+
+    axall[0].plot(0.005*np.arange(40), mean_score[0], color=probe_colors[ip])
+    axall[0].fill_between(0.005*np.arange(40), mean_score[0]+sem_score[0], mean_score[0]-sem_score[0], color=probe_colors[ip], alpha=0.3)
+    
+    axall[1].plot(0.005*np.arange(40), mean_score[1], color=probe_colors[ip])
+    axall[1].fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color=probe_colors[ip], alpha=0.3)
+    
+axall[0].legend(['A', 'B', 'C', 'D', 'E', 'F'])
+    
+def find_latency(x, chance):
+    
+    x = np.interp(np.arange(200), 5*np.arange(40), x)
+    maxval = max(x)
+    threshold = chance + (maxval-chance)/2
+#    threshold = chance + 0.1*(1-chance)
+    
+    latency = np.where(x>threshold)[0]
+    if len(latency)==0:
+        latency = np.nan
+    else:
+        latency = latency[0]
+    
+    return latency
+
+########### split G and H days ###############
+all_session_probe_score_ghsplit = {a:{b:{c:[] for c in ['G', 'H']} for b in ['image', 'change']} for a in 'ABCDEF'}
+decoding_latencies = {a:{b:{c:[] for c in ['G', 'H']} for b in ['image', 'change']} for a in 'ABCDEF'}
+for this_session_id in session_predictions:
+    
+    probe_score = session_predictions[this_session_id]
+    imlabels = session_image_labels[this_session_id]
+    chlabels = session_change_labels[this_session_id]
+    day_label = 'G' if 'im036_r' in imlabels else 'H'
+    
+    for probe in probe_score:
+#        fig, ax = plt.subplots()
+#        fig.suptitle(probe)
+        if isinstance(probe_score[probe], dict):
+            scores = [[np.sum(preds==labels)/len(labels) for preds in probe_score[probe][labelname]] for labelname,labels in zip(['image', 'change'], [imlabels, chlabels])]
+            all_session_probe_score_ghsplit[probe]['image'][day_label].append(scores[0])
+            all_session_probe_score_ghsplit[probe]['change'][day_label].append(scores[1])
+            
+            im_latency = find_latency(scores[0], 0.125)
+            ch_latency = find_latency(scores[1], 0.5)
+            
+            decoding_latencies[probe]['image'][day_label].append(im_latency)
+            decoding_latencies[probe]['change'][day_label].append(ch_latency)
+    
+
+probe_colors = ['r', 'orange', 'k', 'g', 'b', 'purple']
+for day_label in ['G', 'H']:
+    figall, axall = plt.subplots(1,2)
+    figall.suptitle(day_label)
+    
+    figlat, axlat = plt.subplots()
+    figlat.suptitle('decoder latencies ' + day_label)
+    for ip, probe in enumerate('ABCDEF'):
+        
+        fig, ax = plt.subplots()
+        fig.suptitle(probe)
+        
+        mean_score = [np.mean(all_session_probe_score_ghsplit[probe][label][day_label], axis=0) for label in ['image', 'change']]
+        sem_score = [np.std(all_session_probe_score_ghsplit[probe][label][day_label], axis=0)/len(all_session_probe_score_ghsplit[probe][label][day_label])**0.5 for label in ['image', 'change']]
+        
+        ax.plot(0.005*np.arange(40), mean_score[0], 'k')
+        ax.fill_between(0.005*np.arange(40), mean_score[0]+sem_score[0], mean_score[0]-sem_score[0], color='k', alpha=0.3)
+        ax2 = ax.twinx()
+        ax2.plot(0.005*np.arange(40), mean_score[1], 'g')
+        ax2.fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color='g', alpha=0.3)
+    
+        axall[0].plot(0.005*np.arange(40), mean_score[0], color=probe_colors[ip])
+        axall[0].fill_between(0.005*np.arange(40), mean_score[0]+sem_score[0], mean_score[0]-sem_score[0], color=probe_colors[ip], alpha=0.3)
+        
+        axall[1].plot(0.005*np.arange(40), mean_score[1], color=probe_colors[ip])
+        axall[1].fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color=probe_colors[ip], alpha=0.3)
+        
+        
+        axlat.plot(np.nanmedian(decoding_latencies[probe]['change'][day_label]),np.nanmedian(decoding_latencies[probe]['image'][day_label]), 'o', color=probe_colors[ip])
+        
+    axall[0].legend(['A', 'B', 'C', 'D', 'E', 'F'])
+    axlat.set_aspect('equal')
+    axlat.plot([0, 100], [0, 100], 'k--')
+
+line_styles = ('-', '--')
+for ip, probe in enumerate('ABCDEF'):
+    fig, ax = plt.subplots(1,2)
+    ax[0].set_title('image')
+    ax[1].set_title('change')
+    fig.set_size_inches([14,8])
+    fig.suptitle(probe)
+    for iday, day_label in enumerate(['G', 'H']):
+        
+        mean_score = [np.mean(all_session_probe_score_ghsplit[probe][label][day_label], axis=0) for label in ['image', 'change']]
+        sem_score = [np.std(all_session_probe_score_ghsplit[probe][label][day_label], axis=0)/len(all_session_probe_score_ghsplit[probe][label][day_label])**0.5 for label in ['image', 'change']]
+        
+        for il, label in enumerate(['image', 'change']):
+            ax[il].plot(0.005*np.arange(40), mean_score[il], color=probe_colors[ip], linestyle=line_styles[iday])
+            ax[il].fill_between(0.005*np.arange(40), mean_score[il]+sem_score[il], mean_score[il]-sem_score[il], color=probe_colors[ip], alpha=0.3)
+
+
+
+g_images = np.array(['im012_r', 'im036_r', 'im044_r', 'im047_r', 'im078_r', 'im083_r',
+       'im111_r', 'im115_r'])
+
+h_images = np.array(['im005_r', 'im024_r', 'im034_r', 'im083_r', 'im087_r', 'im104_r',
+       'im111_r', 'im114_r'])
+
+summary_matrix = {a:{b:np.zeros((8,8)) for b in ['G', 'H']} for a in 'ABCDEF'}
+count_matrix = {a:{b:np.zeros((8,8)) for b in ['G', 'H']} for a in 'ABCDEF'}
+
+
+####### make 'behavior matrix' for decoding results #######
+for this_session_id in session_predictions:
+    
+    probe_score = session_predictions[this_session_id]
+    imlabels = session_image_labels[this_session_id]
+    chlabels = session_change_labels[this_session_id]
+    day_label = 'G' if 'im036_r' in imlabels else 'H'
+    image_list = g_images if day_label=='G' else h_images
+    
+    rowids = [np.where(pre==image_list)[0][0] for pre in np.reshape(imlabels, [2,-1])[0]]
+    colids = [np.where(post==image_list)[0][0] for post in np.reshape(imlabels, [2,-1])[1]]
+    
+    for probe in probe_score:
+        if isinstance(probe_score[probe], dict):
+            
+            preds = np.reshape(probe_score[probe]['change'][30], [2,-1])[1]
+            for ipred, pred in enumerate(preds):
+                summary_matrix[probe][day_label][rowids[ipred], colids[ipred]] += pred
+                count_matrix[probe][day_label][rowids[ipred], colids[ipred]] += 1
+                
+for day_label in ['G', 'H']:
+    for probe in 'ABCDEF':
+        fig, ax = plt.subplots()
+        fig.suptitle(probe)
+        image_list = g_images if day_label=='G' else h_images
+        
+        hitmat = summary_matrix[probe][day_label]/count_matrix[probe][day_label]
+        im = ax.imshow(hitmat, clim=[0,1])
+        
+        ax.set_xticks(np.arange(8))
+        ax.set_xticklabels(image_list, rotation='45')
+        plt.colorbar(im)
+    
+
+#look at timing of novel vs familiar image decoding for H
+shared_images = ('im083_r', 'im111_r')
+h_scores = {a:{b:[] for b in ['shared', 'novel']} for a in 'ABCDEF'}
+for this_session_id in session_predictions:
+    
+    probe_score = session_predictions[this_session_id]
+    imlabels = session_image_labels[this_session_id]
+    chlabels = session_change_labels[this_session_id]
+    day_label = 'G' if 'im036_r' in imlabels else 'H'
+    image_list = g_images if day_label=='G' else h_images
+    
+    if day_label == 'H':
+        
+        shared_inds = np.isin(imlabels, shared_images)
+        
+        for probe in probe_score:
+            if isinstance(probe_score[probe], dict):
+                
+                preds = probe_score[probe]['image']
+                
+                shared_score = [np.sum(p[shared_inds]==imlabels[shared_inds])/np.sum(shared_inds) for p in preds]
+                novel_score = [np.sum(p[~shared_inds]==imlabels[~shared_inds])/np.sum(~shared_inds) for p in preds]
+                
+                h_scores[probe]['shared'].append(shared_score)
+                h_scores[probe]['novel'].append(novel_score)
+
+       
+for probe in 'ABCDEF':
+
+    fig, ax = plt.subplots()
+    fig.suptitle(probe)     
+
+    ax.plot(0.005*np.arange(40), np.mean(h_scores[probe]['shared'], axis=0), 'k')
+    ax.plot(0.005*np.arange(40), np.mean(h_scores[probe]['novel'], axis=0), 'g')
+                
+                
+
+## make column averaged beh matrix over time ##
+col_averaged_hit_mat = {a: {b:[] for b in ['G', 'H']} for a in 'ABCDEF'}
+for this_session_id in session_predictions:
+    
+    probe_score = session_predictions[this_session_id]
+    imlabels = session_image_labels[this_session_id]
+    chlabels = session_change_labels[this_session_id]
+    day_label = 'G' if 'im036_r' in imlabels else 'H'
+    image_list = g_images if day_label=='G' else h_images
+    
+    rowids = [np.where(pre==image_list)[0][0] for pre in np.reshape(imlabels, [2,-1])[0]]
+    colids = [np.where(post==image_list)[0][0] for post in np.reshape(imlabels, [2,-1])[1]]
+    
+    for probe in probe_score:
+        col_averages = []
+        if isinstance(probe_score[probe], dict):
+            for timepoint in np.arange(40):
+                preds = np.reshape(probe_score[probe]['change'][timepoint], [2,-1])[1]
+                timepoint_averages = []
+                for im in image_list:
+                    inds = np.reshape(imlabels, [2,-1])[1] == im
+                    score = np.sum(preds[inds])/np.sum(inds)
+                    timepoint_averages.append(score)
+
+                col_averages.append(timepoint_averages)
+            col_averaged_hit_mat[probe][day_label].append(np.array(col_averages))
+            
+
+for day_label in ['G', 'H']:
+    fig, ax = plt.subplots(1, 6)
+    fig.set_size_inches([16, 8])
+    
+    for ip, p in enumerate('ABCDEF'):
+        
+        im = ax[ip].imshow(np.mean(col_averaged_hit_mat[p][day_label], axis=0), clim=[0.4, 1])
+        ax[ip].set_title(p)
+        
+        ax[ip].set_yticks(np.arange(0, 40, 5))
+        ax[ip].set_yticklabels(0.005*np.arange(0, 40, 5))
+        
+        
+        
+fig, ax = plt.subplots()
+for ip, p in enumerate('ABCDEF'):
+    
+    resp = np.mean([c for c in p_cr_dict[p]['FS']['_G']['cr'][:-1]], axis=0)
+    
+    ax.plot(resp - np.mean(resp[750:1000]), color=probe_colors[ip])
+    
+    
+        
+        
+    
+
+
+         
+            
