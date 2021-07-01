@@ -487,7 +487,7 @@ def get_monitor_lag(syncDataset):
 
 def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count, 
                          behavior_start_frame, mapping_start_frame, 
-                         replay_start_frame, save_dir, prefix=''):
+                         replay_start_frame, save_dir=None, prefix=''):
     
     fig, ax = plt.subplots()
     fig.suptitle('stim frame intervals')
@@ -508,10 +508,11 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
             'rf', horizontalalignment='center')
     ax.text(replay_start_frame+behavior_frame_count/2, 0.15, 'replay', horizontalalignment='center')
     
-    save_figure(fig, os.path.join(save_dir, prefix+'stim_frame_intervals.png'))
+    if save_dir is not None:
+        save_figure(fig, os.path.join(save_dir, prefix+'stim_frame_intervals.png'))
 
 
-def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
+def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR=None, prefix=''):
     
     fig, ax = plt.subplots(constrained_layout=True)
     fig.suptitle('Vsync interval histogram')
@@ -523,7 +524,8 @@ def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR, prefix=''):
     ax.set_xlabel('frame interval (ms)')
     ax.legend([v], ['expected interval'])
     
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
+    if FIG_SAVE_DIR is not None:
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.png'))
     #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_interval_histogram.plotly.json'))
 
 
@@ -1329,7 +1331,7 @@ def resize_image(image, fx=0.5, fy=0.5):
 
 def search_pkl(pdict, item, level = [], found=False):
     
-    if item in pdict:
+    if np.any([item in key for key in pdict]):
         return level, True
     
     good_paths = []
@@ -1344,9 +1346,9 @@ def search_pkl(pdict, item, level = [], found=False):
                 good_paths.append(lv)
                 found = True
      
-    good_paths = unpack_list(good_paths)
-    good_paths = [unpack_list(g, 0) for g in good_paths]
-    
+    #good_paths = unpack_list(good_paths)
+    #good_paths = [unpack_list(g, 0) for g in good_paths]
+    #print('c')
     return good_paths, found
 
             

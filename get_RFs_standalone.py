@@ -26,7 +26,7 @@ import argparse
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
             FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, 
             response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix='',
-            save_rf_mat=False): 
+            save_rf_mat=False, plot=True): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
     rfs = {p:{k:[] for k in ['peak_channel', 'unitID', 'rfmat']} for p in probe_dict}
@@ -51,40 +51,40 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
                 
             rmats_normed_mean = np.nanmean(rmats, axis=0)
          
-            
-            rfig = plt.figure(constrained_layout=True, figsize=[6,6])
-            title = p + ' population RF: {} units'.format(len(rmats))   
-            rfig.suptitle(title, color='w')
-            
-            nrows, ncols = 10,10
-            gs = gridspec.GridSpec(ncols=ncols, nrows=nrows, figure=rfig)
-            
-            ax1 = rfig.add_subplot(gs[0:nrows-1, 0:ncols-1])
-            ax2 = rfig.add_subplot(gs[0:nrows-1, ncols-1])
-            ax3 = rfig.add_subplot(gs[nrows-1, 0:ncols-1])
-            
-            ax1.imshow(np.mean(rmats_normed_mean, axis=2), origin='lower')
-            ax1.set_xticks([], minor=[])
-            ax1.set_yticks([], minor=[])
-            
-            ax3.imshow(np.vstack((np.arange(-45, 46), np.arange(-45, 46))), cmap='jet', clim=[-60, 60])
-            ax3.set_xticks([0, 45, 90])
-            ax3.set_xticklabels([-45, 0, 45])
-            ax3.set_yticks([], minor=[])
-            ax3.set_xlabel('Azimuth')
-            
-            ax2.imshow(np.hstack((np.arange(-45, 46)[:,None], np.arange(-45, 46)[:,None])), cmap='jet_r', clim=[-60, 60])
-            ax2.yaxis.tick_right()
-            ax2.set_yticks([0, 45, 90])
-            ax2.set_yticklabels([-45, 0, 45])
-            ax2.set_xticks([], minor=[])
-            ax2.yaxis.set_label_position("right")
-            ax2.set_ylabel('Elevation', rotation=270)
-            
-            save_path = os.path.join(FIG_SAVE_DIR, prefix + p + ' population RF.png')
-            print(save_path)
-            save_figure(rfig, save_path)
-            #rfig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+            if plot:
+                rfig = plt.figure(constrained_layout=True, figsize=[6,6])
+                title = p + ' population RF: {} units'.format(len(rmats))   
+                rfig.suptitle(title, color='w')
+                
+                nrows, ncols = 10,10
+                gs = gridspec.GridSpec(ncols=ncols, nrows=nrows, figure=rfig)
+                
+                ax1 = rfig.add_subplot(gs[0:nrows-1, 0:ncols-1])
+                ax2 = rfig.add_subplot(gs[0:nrows-1, ncols-1])
+                ax3 = rfig.add_subplot(gs[nrows-1, 0:ncols-1])
+                
+                ax1.imshow(np.mean(rmats_normed_mean, axis=2), origin='lower')
+                ax1.set_xticks([], minor=[])
+                ax1.set_yticks([], minor=[])
+                
+                ax3.imshow(np.vstack((np.arange(-45, 46), np.arange(-45, 46))), cmap='jet', clim=[-60, 60])
+                ax3.set_xticks([0, 45, 90])
+                ax3.set_xticklabels([-45, 0, 45])
+                ax3.set_yticks([], minor=[])
+                ax3.set_xlabel('Azimuth')
+                
+                ax2.imshow(np.hstack((np.arange(-45, 46)[:,None], np.arange(-45, 46)[:,None])), cmap='jet_r', clim=[-60, 60])
+                ax2.yaxis.tick_right()
+                ax2.set_yticks([0, 45, 90])
+                ax2.set_yticklabels([-45, 0, 45])
+                ax2.set_xticks([], minor=[])
+                ax2.yaxis.set_label_position("right")
+                ax2.set_ylabel('Elevation', rotation=270)
+                
+                save_path = os.path.join(FIG_SAVE_DIR, prefix + p + ' population RF.png')
+                print(save_path)
+                save_figure(rfig, save_path)
+                #rfig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
             
         
         except Exception as E:
@@ -253,7 +253,12 @@ if __name__ == "__main__":
         print('RF mapping started at frame {}, or experiment time {} seconds'.format(start_frame[0], start_frame[0]/60.))
         
         probe_dict = probeSync.build_unit_table(paths['data_probes'], paths, syncDataset)
-        rf_mat = get_RFs(probe_dict, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, return_rfs=True, prefix=figure_prefix)
+        probe_dict_old_format = {}
+        for p in probe_dict['probe'].unique():
+            probe_dict_old_format[p] = probe_dict.loc[probe_dict['probe']==p]
+            
+        rf_mat = get_RFs(probe_dict_old_format, mapping_data, start_frame[0], FRAME_APPEAR_TIMES, FIG_SAVE_DIR, 
+                         return_rfs=True, prefix=figure_prefix, plot=False, tile_rfs=False)
         rf_save_dir = save_dir
         if save_rf_npy:
             with open(os.path.join(rf_save_dir, paths['es_id']+'_'+paths['external_specimen_name']+'_'+paths['datestring']+'rfmats.npy'), 'wb') as fp:

@@ -399,7 +399,7 @@ for c in h_cr:
     ax.plot(c)
 ax.legend(h_image_list)
 
-def formataxes(ax, title=None, xLabel=None, yLabel=None, 
+def formataxes(ax, title=None, xLabel=None, yLabel=None, xTicks=None, 
                xTickLabels=None, yTickLabels=None, no_spines=False,
                ylims=None, xlims=None, spinesToHide=None):
     
@@ -407,7 +407,12 @@ def formataxes(ax, title=None, xLabel=None, yLabel=None,
         spinesToHide = ['right', 'top', 'left', 'bottom'] if no_spines else ['right', 'top']
     for spines in spinesToHide:
         ax.spines[spines].set_visible(False)
-
+    
+    if xTicks is not None:
+        ax.set_xticks(xTicks)
+    if xTickLabels is not None:
+        ax.set_xticklabels(xTickLabels)
+        
     ax.tick_params(direction='out',top=False,right=False)
     
     if title is not None:
@@ -472,7 +477,7 @@ for probe, pgroup in probe_grouped:
         p_cr_dict[probe][genotype] = {}
         for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
             
-            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            good_unit_filter = ((pgroup['quality']=='good')&(pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
             if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
                 df_filter = ((pgroup['image_set'].str.contains(image_set)) &
                             (pgroup['genotype']== genotype) &
@@ -519,7 +524,7 @@ for probe in p_cr_dict:
         [a.set_ylim([miny, maxy]) for a in axes]
         
         fig.savefig(os.path.join(fig_save_path, 'mean_image_response_' + probe + '_' + genotype + '_goodunits.png'))
-
+        plt.close('all')
 
 
 ### Image response mat for all cells of each genotype/probe/image set combo
@@ -535,7 +540,8 @@ for probe, pgroup in probe_grouped:
         p_crmat_dict[probe][genotype] = {}
         for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
             
-            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            good_unit_filter = ((pgroup['quality']=='good')&(pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+
             gtoh_filter = (pgroup['mouseID']!='548722')
             if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
                 df_filter = ((pgroup['image_set'].str.contains(image_set)) &
@@ -559,7 +565,7 @@ common_ind_dict = {'_G': [5,6],
 other_ind_dict = {'_G': [0,1,2,3,4,7],
                   '_H': [0,1,2,4,5,7]}
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
-for probe in ['C']:# p_crmat_dict:
+for probe in p_crmat_dict:
     for genotype in genotypes:
         for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
             for cat, cat_inds in zip(['common', 'other'], [common_ind_dict, other_ind_dict]):
@@ -620,6 +626,135 @@ for probe in p_crmat_dict:
         analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset_newcolors\\'+figname))
             #plt.close(fig)
         plt.close('all')
+
+## collapse across areas: plot CR responses to common and private images group by both sharedness and image set
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+image_set_colors = ['b', 'r']
+shared_colors = ['purple', 'g']
+
+for genotype in genotypes:
+    fig, ax = plt.subplots(1,2)
+    fig.set_size_inches([12,8])
+    
+    ifig, iax = plt.subplots(1,2)
+    ifig.set_size_inches([12,8])
+    for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+        iax[ind].set_title(genotype+image_set)
+        for ic, (cat, cat_inds) in enumerate(zip(['common', 'private'], [common_ind_dict, other_ind_dict])):
+            cr = [p_crmat_dict[probe][genotype][image_set][cat_inds[image_set]] for probe in 'ABCDEF']
+            cr = np.concatenate([c for c in cr if c.size>0], axis=1)
+            cr = np.mean(cr, axis=0)
+            #cr = np.mean(p_crmat_dict[probe][genotype][image_set][cat_inds[image_set]], axis=0)
+            ax[ic].set_title(genotype+' '+cat)
+            
+            if len(cr)>0:
+                time = np.arange(-1000,1000)
+                cr = cr - np.mean(cr[:, 900:1000], axis=1)[:, None]
+                cr_mean_over_cells = np.mean(cr, axis=0)
+                cr_sem_over_cells = np.std(cr, axis=0)/(cr.shape[0])**0.5
+                ax[ic].plot(time, cr_mean_over_cells, image_set_colors[ind])
+                ax[ic].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                  cr_mean_over_cells-cr_sem_over_cells, color=image_set_colors[ind], alpha=0.5, linewidth=0)
+                formataxes(ax[ic], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                
+                iax[ind].plot(time, cr_mean_over_cells, shared_colors[ic])
+                iax[ind].fill_between(time, cr_mean_over_cells+cr_sem_over_cells,
+                  cr_mean_over_cells-cr_sem_over_cells, color=shared_colors[ic], alpha=0.5, linewidth=0)
+                formataxes(iax[ind], xLabel='Time from change (s)', yLabel='Firing Rate (Hz)')
+                
+                
+    miny = np.min([a.get_ylim()[0] for a in ax])
+    maxy = np.max([a.get_ylim()[1] for a in ax])
+    
+    [[a.set_ylim([miny, maxy]) for a in axes] for axes in [ax, iax]]
+    [[a.set_xlim([-100, 500]) for a in axes] for axes in [ax, iax]]
+    ax[0].legend(['G', 'H'])
+    iax[0].legend(['common', 'private'])
+    figname = 'allareas' + '_' + genotype + '_commonVsprivate_groupedbyshared.pdf'
+    analysis.save_figure(fig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyshared_newcolors\\'+figname))
+    ifigname = 'allareas' + '_' + genotype + '_commonVsprivate_groupedbyimageset.pdf'
+    analysis.save_figure(ifig, os.path.join(fig_save_path, 'commonVprivate_CR_groupedbyimageset_newcolors\\'+figname))
+        #plt.close(fig)
+    plt.close('all')
+    
+    
+## calculate context/novelty modulation indices 
+def get_median_error(array, repeats=1000, ub_percentile=97.5, lb_percentile=2.5):
+    ms = []
+    for r in np.arange(repeats):
+        ms.append(np.nanmedian(np.random.choice(array, len(array), replace=True)))
+    
+    return np.nanmedian(array), np.percentile(ms, lb_percentile), np.percentile(ms, ub_percentile)
+        
+        
+
+genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
+modulation_index = {a: {b: {c:[] for c in genotypes} for b in ['novelty', 'context']} for a in 'ABCDEF'}
+baseline_sub = lambda x: np.array([xx - np.mean(xx[900:1000]) for xx in x])
+get_resp = lambda x: np.array([np.max(xx[1025:1175]) for xx in x])
+
+for probe in p_crmat_dict:
+    for genotype in genotypes:
+        
+        h_common = p_crmat_dict[probe][genotype]['_H'][common_ind_dict['_H']]
+        h_private = p_crmat_dict[probe][genotype]['_H'][other_ind_dict['_H']]
+        
+        if h_common.shape[1]>1:
+            h_common_over_images = np.mean(h_common, axis=0)
+            h_private_over_images = np.mean(h_private, axis=0)
+            
+            #novelty_mod = (get_resp(h_private_over_images) - get_resp(h_common_over_images))/(get_resp(h_private_over_images) + get_resp(h_common_over_images))
+            novelty_mod = (get_resp(baseline_sub(h_private_over_images)) - get_resp(baseline_sub(h_common_over_images)))/(get_resp(baseline_sub(h_private_over_images)) + get_resp(baseline_sub(h_common_over_images)))
+            #novelty_mod = (get_resp(baseline_sub(h_private_over_images)) - get_resp(baseline_sub(h_common_over_images)))
+            #novelty_mod = (get_resp(baseline_sub(h_private_over_images)) - get_resp(baseline_sub(h_common_over_images)))/(1+get_resp(baseline_sub(h_common_over_images)))
+            modulation_index[probe]['novelty'][genotype] = novelty_mod[~np.isinf(novelty_mod)]
+            #modulation_index[probe]['novelty'][genotype] = [np.nanmedian(novelty_mod), np.nanstd(novelty_mod)/np.sum(~np.isnan(novelty_mod))**0.5]
+            
+        #g_common = p_crmat_dict[probe][genotype]['_G'][common_ind_dict['_G']]
+
+#plot novelty modulation for each area
+for probe in p_crmat_dict:
+    fig, ax = plt.subplots()
+    for ig, genotype in enumerate(['RS', 'FS', 'Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']):       
+        if len(modulation_index[probe]['novelty'][genotype])>0:
+            median, lb, ub = get_median_error(modulation_index[probe]['novelty'][genotype])
+#            mean = np.nanmean(modulation_index[probe]['novelty'][genotype])
+#            sem = np.nanstd(modulation_index[probe]['novelty'][genotype])/np.sum(~np.isnan(modulation_index[probe]['novelty'][genotype]))**0.5
+            ax.errorbar(ig, median, yerr=[[median-lb], [median-ub]])
+        
+#plot novelty modulation across hierarchy
+for ig, genotype in enumerate(['RS', 'FS', 'Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']):
+    fig, ax = plt.subplots()
+    fig.suptitle(genotype)
+    for ip, probe in enumerate('CDFEBA'):
+        if len(modulation_index[probe]['novelty'][genotype])>0:
+            median, lb, ub = get_median_error(modulation_index[probe]['novelty'][genotype])
+            #mean = np.nanmean(modulation_index[probe]['novelty'][genotype])
+            #sem = np.nanstd(modulation_index[probe]['novelty'][genotype])/np.sum(~np.isnan(modulation_index[probe]['novelty'][genotype]))**0.5
+            ax.errorbar(ip, median, yerr=[[median-lb], [median-ub]])
+
+
+#plot for cell types but collapse across areas
+fig, ax = plt.subplots()
+ax.axhline(0, color='0.5', linestyle='--')
+genotype_mods = []
+for ig, genotype in enumerate(['RS', 'FS', 'Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']):
+    
+    novelty_mod = [modulation_index[probe]['novelty'][genotype] for probe in 'ABCDEF']
+    novelty_mod = np.array([score for sublist in novelty_mod for score in sublist])
+    novelty_mod = novelty_mod[np.abs(novelty_mod)<=1]
+    genotype_mods.append(novelty_mod)
+    median, lb, ub = get_median_error(novelty_mod)
+    
+    ax.errorbar(ig, median, yerr=[[abs(median-lb)], [abs(median-ub)]], color='k', fmt='none')
+    ax.plot(ig, median, 'ko', ms=10, markerfacecolor='w')
+    
+    #ax.violinplot(novelty_mod[~np.isnan(novelty_mod)], [ig], showmeans=False, showmedians=True, showextrema=False )
+formataxes(ax, xLabel='cell class', yLabel='novelty modulation',
+           xTickLabels=['RS', 'FS', 'VIP', 'SST'], xTicks=np.arange(4))
+sig = scipy.stats.kruskal(*genotype_mods, nan_policy='omit')
+ax.text(0, 0.4, 'p_kruskal: ' + format(sig[1], '1.0E'))
+analysis.save_figure(fig, os.path.join(fig_save_dir, 'novelty_modulation_across_genotypes.png'))
 
 ## COLLAPSE ACROSS PROBES plot CR responses to common and private images group by both sharedness and image set
 genotypes = ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32', 'RS', 'FS']
@@ -701,6 +836,34 @@ for probe in p_crmat_dict:
         analysis.save_figure(fig, os.path.join(fig_save_path, 'omission_response_newcolors\\'+figname))
         plt.close('all')
 
+## plot omission collapse across probes ###
+for genotype in genotypes:
+    fig, ax = plt.subplots()
+    fig.set_size_inches([6,6])
+    
+    for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
+        iax[ind].set_title(probe+' '+genotype+image_set)
+        
+        omission_resp = [p_crmat_dict[probe][genotype][image_set][-1] for probe in 'ABCDEF']
+        ors = [o for o in omission_resp if o.size>0]
+        omission_resp = np.concatenate(ors, axis=0)
+        ax.set_title(genotype)
+        
+        if len(omission_resp)>0:
+            time = np.arange(-1000,1000)
+            or_mean_over_cells = np.mean(omission_resp, axis=0)
+            or_sem_over_cells = np.std(omission_resp, axis=0)/(omission_resp.shape[0])**0.5
+            ax.plot(time, or_mean_over_cells, image_set_colors[ind])
+            ax.fill_between(time, or_mean_over_cells+or_sem_over_cells,
+              or_mean_over_cells-or_sem_over_cells, color=image_set_colors[ind], alpha=0.5, linewidth=0.0)
+            formataxes(ax, xLabel='Time from omission (s)', yLabel='Firing Rate (Hz)')
+            
+    ax.set_xlim([-400, 1000]) 
+    ax.legend(['G', 'H'])
+    
+    figname = 'allareas_' + genotype + '_omission_response.png'
+    analysis.save_figure(fig, os.path.join(fig_save_path, 'omission_response_newcolors\\'+figname))
+    plt.close('all')
 
 
 ### OPTO responses for all genotype/probe combos
@@ -714,7 +877,7 @@ for probe, pgroup in probe_grouped:
     for genotype in genotypes:
         for ind, (image_set, image_list) in enumerate(zip(['_G', '_H'], [g_image_list, h_image_list])):
             
-            good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+            good_unit_filter = ((pgroup['quality']=='good')&(pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
             
             if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
                 df_filter = ((pgroup['image_set'].str.contains(image_set)) &
@@ -827,7 +990,8 @@ probe_grouped = combined_df.groupby('probe')
 for probe, pgroup in probe_grouped:
 
     for genotype in genotypes:
-        good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+        good_unit_filter = ((pgroup['quality']=='good')&(pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+
         gtoh_filter = (pgroup['mouseID']!='548722')
         if genotype in ['Vip-IRES-Cre;Ai32', 'Sst-IRES-Cre;Ai32']:
             df_filter = (
@@ -886,7 +1050,7 @@ for probe, pgroup in probe_grouped:
             ax.set_aspect('equal')
             
             
-good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1))
+good_unit_filter = ((combined_df['quality']=='good')&(combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1))
 gtoh_filter = (combined_df['mouseID']!='548722')
 new_g_order = np.array(['im036_r', 'im047_r', 'im012_r', 'im078_r', 'im044_r', 'im115_r', 'im083_r', 'im111_r', 'omitted'])
 new_h_order = np.array(['im104_r', 'im114_r', 'im024_r', 'im034_r', 'im087_r', 'im005_r', 'im083_r', 'im111_r', 'omitted'])
@@ -930,7 +1094,7 @@ for genotype in ('VIP', 'SST', 'RS', 'FS'):
 
 probe_grouped = combined_df.groupby('probe')
 for probe, pgroup in probe_grouped:
-    good_unit_filter = ((pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
+    good_unit_filter = ((pgroup['quality']=='good')&(pgroup['snr']>1)&(pgroup['isi_viol']<1)&(pgroup['firing_rate']>0.1))
     gtoh_filter = (pgroup['mouseID']!='548722')
     for genotype in ('VIP', 'SST', 'RS', 'FS'):
         
@@ -999,7 +1163,7 @@ def change_responses_over_time(row):
     return np.array(qcrs)
         
 
-good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
+good_unit_filter = ((combined_df['quality']=='good')&(combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
 gtoh_filter = (combined_df['mouseID']!='548722')
 for genotype in genotypes:
     
@@ -1109,9 +1273,6 @@ ax.set_title('Novelty and Context modulation in V1')
 ax.set_ylabel('Population Firing Rate Modulation')
 formataxes(ax)
 ax.legend(['Novelty', 'Context'])
-
-
-
 
 # probe spike rates across all experiments
 good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
@@ -1236,7 +1397,7 @@ def makePSTH_numba_pertrial(spikes, startTimes, windowDur, binSize=0.001, convol
 
 models = (RandomForestClassifier(n_estimators=100),LinearSVC(C=1.0,max_iter=1e4))
 
-good_unit_filter = ((combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
+good_unit_filter = ((combined_df['quality']=='good')&(combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1)&(combined_df['presence_ratio']>0.98))
 gtoh_filter = (combined_df['mouseID']!='548722')
 
 session_ids = combined_df.loc[gtoh_filter]['sessionID'].unique()
@@ -1295,6 +1456,8 @@ for ind, this_session_id in enumerate(session_ids):
         print('failed to run session {}'.format(this_session_id))
 
 ########### take G and H days together#############
+fig_save_dir = r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021"
+
 all_session_probe_score = {a:{b:[] for b in ['image', 'change']} for a in 'ABCDEF'}
 for this_session_id in session_predictions:
     
@@ -1314,7 +1477,7 @@ for this_session_id in session_predictions:
 #        ax2.plot(0.005*np.arange(40), scores[1], 'k--')
 
 probe_colors = ['r', 'orange', 'k', 'g', 'b', 'purple']
-fig, axall = plt.subplots(1,2)
+figall, axall = plt.subplots(1,2)
 for ip, probe in enumerate('ABCDEF'):
     fig, ax = plt.subplots()
     fig.suptitle(probe)
@@ -1335,6 +1498,7 @@ for ip, probe in enumerate('ABCDEF'):
     axall[1].fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color=probe_colors[ip], alpha=0.3)
     
 axall[0].legend(['A', 'B', 'C', 'D', 'E', 'F'])
+analysis.save_figure(figall, os.path.join(fig_save_dir, 'image_change_decoding_timecourse_allareas.png'))
     
 def find_latency(x, chance):
     
@@ -1396,7 +1560,9 @@ for day_label in ['G', 'H']:
         ax2 = ax.twinx()
         ax2.plot(0.005*np.arange(40), mean_score[1], 'g')
         ax2.fill_between(0.005*np.arange(40), mean_score[1]+sem_score[1], mean_score[1]-sem_score[1], color='g', alpha=0.3)
-    
+        
+        analysis.save_figure(fig, os.path.join(fig_save_dir, day_label + '_' + probe + '_decoder_timecourse.png'))
+        
         axall[0].plot(0.005*np.arange(40), mean_score[0], color=probe_colors[ip])
         axall[0].fill_between(0.005*np.arange(40), mean_score[0]+sem_score[0], mean_score[0]-sem_score[0], color=probe_colors[ip], alpha=0.3)
         
@@ -1409,7 +1575,11 @@ for day_label in ['G', 'H']:
     axall[0].legend(['A', 'B', 'C', 'D', 'E', 'F'])
     axlat.set_aspect('equal')
     axlat.plot([0, 100], [0, 100], 'k--')
-
+    
+    analysis.save_figure(figall, os.path.join(fig_save_dir, day_label + '_decoding_timecourse_allareas.png'))
+    
+    
+    
 line_styles = ('-', '--')
 for ip, probe in enumerate('ABCDEF'):
     fig, ax = plt.subplots(1,2)
@@ -1426,21 +1596,25 @@ for ip, probe in enumerate('ABCDEF'):
             ax[il].plot(0.005*np.arange(40), mean_score[il], color=probe_colors[ip], linestyle=line_styles[iday])
             ax[il].fill_between(0.005*np.arange(40), mean_score[il]+sem_score[il], mean_score[il]-sem_score[il], color=probe_colors[ip], alpha=0.3)
 
-
+    analysis.save_figure(fig, os.path.join(fig_save_dir, probe+'_GvsH_decoder_timecourse.png'))
 
 g_images = np.array(['im012_r', 'im036_r', 'im044_r', 'im047_r', 'im078_r', 'im083_r',
        'im111_r', 'im115_r'])
 
 h_images = np.array(['im005_r', 'im024_r', 'im034_r', 'im083_r', 'im087_r', 'im104_r',
        'im111_r', 'im114_r'])
+            
+g_images = np.array(['im036_r', 'im047_r', 'im012_r', 'im078_r', 'im044_r', 'im115_r', 'im083_r', 'im111_r'])
+h_images = np.array(['im104_r', 'im114_r', 'im024_r', 'im034_r', 'im087_r', 'im005_r', 'im083_r', 'im111_r'])
 
 summary_matrix = {a:{b:np.zeros((8,8)) for b in ['G', 'H']} for a in 'ABCDEF'}
 count_matrix = {a:{b:np.zeros((8,8)) for b in ['G', 'H']} for a in 'ABCDEF'}
 
-
+individual_mice_mats = {a: {b: {} for b in ['G', 'H']} for a in 'ABCDEF'}
 ####### make 'behavior matrix' for decoding results #######
 for this_session_id in session_predictions:
     
+    mouse_id = combined_df.loc[combined_df['sessionID']==this_session_id]['mouseID'].iloc[0]
     probe_score = session_predictions[this_session_id]
     imlabels = session_image_labels[this_session_id]
     chlabels = session_change_labels[this_session_id]
@@ -1450,18 +1624,42 @@ for this_session_id in session_predictions:
     rowids = [np.where(pre==image_list)[0][0] for pre in np.reshape(imlabels, [2,-1])[0]]
     colids = [np.where(post==image_list)[0][0] for post in np.reshape(imlabels, [2,-1])[1]]
     
+    
     for probe in probe_score:
+        this_mouse_mat = np.zeros((8,8))
+        this_mouse_count = np.zeros((8,8))
         if isinstance(probe_score[probe], dict):
             
             preds = np.reshape(probe_score[probe]['change'][30], [2,-1])[1]
             for ipred, pred in enumerate(preds):
+                this_mouse_mat[rowids[ipred], colids[ipred]] += pred
+                this_mouse_count[rowids[ipred], colids[ipred]] += 1
                 summary_matrix[probe][day_label][rowids[ipred], colids[ipred]] += pred
                 count_matrix[probe][day_label][rowids[ipred], colids[ipred]] += 1
+            
+            #fill in 'false alarm' rates
+            preds = np.reshape(probe_score[probe]['change'][30], [2,-1])[0]
+            for ipred, pred in enumerate(preds):
+                r=c=rowids[ipred]
+                this_mouse_mat[r, c] += pred
+                this_mouse_count[r, c] += 1
+                summary_matrix[probe][day_label][r, c] += pred
+                count_matrix[probe][day_label][r, c] += 1
                 
+                
+            individual_mice_mats[probe][day_label][mouse_id]=this_mouse_mat/this_mouse_count
+            
+#plot some individual mouse mats
+for m in individual_mice_mats['C']['H']:
+    fig, ax = plt.subplots()
+    fig.suptitle(m)
+    plt.imshow(individual_mice_mats['C']['H'][m], clim=[0.4, 1])
+
+           
 for day_label in ['G', 'H']:
     for probe in 'ABCDEF':
         fig, ax = plt.subplots()
-        fig.suptitle(probe)
+        fig.suptitle(probe + ' all mice together')
         image_list = g_images if day_label=='G' else h_images
         
         hitmat = summary_matrix[probe][day_label]/count_matrix[probe][day_label]
@@ -1470,6 +1668,20 @@ for day_label in ['G', 'H']:
         ax.set_xticks(np.arange(8))
         ax.set_xticklabels(image_list, rotation='45')
         plt.colorbar(im)
+        
+        fig2, ax2 = plt.subplots()
+        fig2.suptitle(probe + ' averaged across mice')
+        image_list = g_images if day_label=='G' else h_images
+        
+        hitmat = np.mean([individual_mice_mats[probe][day_label][m] for m in individual_mice_mats[probe][day_label]], axis=0)
+        im = ax2.imshow(hitmat, clim=[0,1])
+        
+        ax2.set_xticks(np.arange(8))
+        ax2.set_xticklabels(image_list, rotation='45')
+        plt.colorbar(im)
+        
+        analysis.save_figure(fig, os.path.join(fig_save_dir, probe+'_' + day_label + '_decoder_accuracy_matrix_allmicetogether.png'))
+        analysis.save_figure(fig2, os.path.join(fig_save_dir, probe+'_' + day_label + '_decoder_accuracy_matrix.png'))
     
 
 #look at timing of novel vs familiar image decoding for H
@@ -1543,26 +1755,170 @@ for day_label in ['G', 'H']:
     
     for ip, p in enumerate('ABCDEF'):
         
-        im = ax[ip].imshow(np.mean(col_averaged_hit_mat[p][day_label], axis=0), clim=[0.4, 1])
+        im = ax[ip].imshow(np.mean(col_averaged_hit_mat[p][day_label], axis=0), clim=[0, 1])
         ax[ip].set_title(p)
         
         ax[ip].set_yticks(np.arange(0, 40, 5))
         ax[ip].set_yticklabels(0.005*np.arange(0, 40, 5))
+    
+    analysis.save_figure(fig, os.path.join(fig_save_dir, day_label + '_decoder_matrix_over_time.png' ))
         
         
+
+############ Compare decoding mat to behavior mat ##########
+behavior_mat = {} # this will just be the mean across mice (all mice will be all the individual mats)
+behavior_mat['G'] = np.load(r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021\beh_mat_G.npy")    
+behavior_mat['H'] = np.load(r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021\beh_mat_H.npy") 
+
+all_mice_beh_mat = {'G': np.load(r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021\all_beh_mat_G.npy"),
+                    'H': np.load(r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021\all_beh_mat_H.npy")}   
+
+behavior_mat_decoder_corr = {a:{} for a in ['G', 'H']}
+
+flatten_no_diagonal = lambda x: [x[r,c] for r in np.arange(x.shape[0]) for c in np.arange(8) if r!=c]
+for day_label in ['H', 'G']:
+    for p in 'ABCDEF':
         
+        hitmats = [individual_mice_mats[p][day_label][m] for m in individual_mice_mats[p][day_label]]
+        behavior_mat_correlations = [np.corrcoef(behavior_mat[day_label].flatten(), h.flatten())[0,1] for h in hitmats]
+        #hitmat = np.mean([individual_mice_mats[p][day_label][m] for m in individual_mice_mats[p][day_label]], axis=0)
+        #behavior_mat_correlation = np.corrcoef(behavior_mat[day_label].flatten(), hitmat.flatten())
+        
+#        behavior_flat_nodiagonal = [behavior_mat[day_label][r,c] for r in np.arange(8) for c in np.arange(8) if r!=c]
+#        hitmat_flat_nodiagonal = [hitmat[r,c] for r in np.arange(8) for c in np.arange(8) if r!=c]
+        behavior_mat_corrs_nodiagonal = [np.corrcoef(flatten_no_diagonal(behavior_mat[day_label]), flatten_no_diagonal(h))[0,1] for h in hitmats]
+
+        behavior_mat_decoder_corr[day_label][p] = (np.nanmean(behavior_mat_corrs_nodiagonal), 
+                                 np.nanstd(behavior_mat_corrs_nodiagonal)/np.sum(~np.isnan(behavior_mat_corrs_nodiagonal))**0.5)
+
+
+hierarchy_scores = [-0.36, -0.09, -0.06, 0.15, 0.33, 0.44] #taken from nature paper
 fig, ax = plt.subplots()
-for ip, p in enumerate('ABCDEF'):
-    
-    resp = np.mean([c for c in p_cr_dict[p]['FS']['_G']['cr'][:-1]], axis=0)
-    
-    ax.plot(resp - np.mean(resp[750:1000]), color=probe_colors[ip])
-    
-    
-        
-        
-    
+fig.set_size_inches([4, 5])
+ax.errorbar(hierarchy_scores, [behavior_mat_decoder_corr['G'][p][0] for p in 'CDFEBA'], yerr=[behavior_mat_decoder_corr['G'][pp][1] for pp in 'CDFEBA'])
+ax.errorbar(hierarchy_scores, [behavior_mat_decoder_corr['H'][p][0] for p in 'CDFEBA'], yerr=[behavior_mat_decoder_corr['H'][pp][1] for pp in 'CDFEBA'])
+ax.set_xticks(hierarchy_scores)
+ax.set_xticklabels(['V1', 'LM', 'RL', 'AL', 'PM' , 'AM'])
+ax.set_ylabel('correlation of decoder and mean behavior matrix')
+ax.legend(['G', 'H'])
+analysis.save_figure(fig, os.path.join(fig_save_dir, 'decoder_corr_with_behaviormat.png'))
 
 
-         
-            
+ax.plot([behavior_mat_decoder_corr['G'][p][0] for p in 'CDEFBA'], 'ko')
+ax.plot([behavior_mat_decoder_corr['H'][p][0] for p in 'CDEFBA'], 'go')
+
+
+#plot col averaged decoder performance summary
+fig, ax = plt.subplots()
+probe_colors = ['g', 'k']
+for ip, probe in enumerate('AC'):
+    
+    col_av = np.array([c[30, :] for c in col_averaged_hit_mat[probe]['H']])
+    #medians = np.array([get_median_error(c) for c in col_av.T])
+    novelmean = np.nanmean(col_av[:, :-2], axis=1)
+    fammean = np.nanmean(col_av[:, -2:], axis=1)
+    
+    novel_mean_over_sessions = np.mean(novelmean)
+    novel_sem_over_sessions = np.std(novelmean)/len(novelmean)**0.5
+    
+    fam_mean_over_sessions = np.mean(fammean)
+    fam_sem_over_sessions = np.std(fammean)/len(fammean)**0.5
+    
+    #mean = np.mean(col_av, axis=0)
+    #sem = np.nanstd(col_av, axis=0)/np.sum(~np.isnan(col_av), axis=0)**0.5
+    
+    #ax.plot(np.arange(8), medians[:,0], 'ko')
+    #ax.errorbar(np.arange(8), medians[:, 0], yerr = [np.abs(medians[:,0] - medians[:,1]), np.abs(medians[:,0]-medians[:,2])])
+    ax.plot([novel_mean_over_sessions, fam_mean_over_sessions], 'o', color=probe_colors[ip], ms=8)
+    ax.errorbar(np.arange(2), [novel_mean_over_sessions, fam_mean_over_sessions], 
+                yerr=[novel_sem_over_sessions, fam_sem_over_sessions], color=probe_colors[ip])
+
+    g_col_av = np.array([c[30, :] for c in col_averaged_hit_mat[probe]['G']])
+    g_fammean = np.nanmean(g_col_av[:, -2:], axis=1)
+    g_fam_mean_over_sessions = np.mean(g_fammean)
+    g_fam_sem_over_sessions = np.std(g_fammean)/len(g_fammean)**0.5
+    
+    ax.plot(1.1, g_fam_mean_over_sessions, 'o', color=probe_colors[ip], mfc='w', ms=8)
+    ax.errorbar(1.1, g_fam_mean_over_sessions, yerr=g_fam_sem_over_sessions, color=probe_colors[ip])
+    
+formataxes(ax, yLabel='Change Decoding Accuracy', xTicks=[0, 1], 
+               xTickLabels=['Novel', 'Familiar'], yTickLabels=None, no_spines=False,
+               ylims=[0.5,1], xlims=[-0.2, 1.3], spinesToHide=None)
+
+beh_g_no_diagonal = np.array([np.reshape(flatten_no_diagonal(bm.T), [8,7]).T for bm in all_mice_beh_mat['G']])
+beh_g_col_means = np.nanmean(beh_g_no_diagonal, axis=1)
+beh_h_no_diagonal = np.array([np.reshape(flatten_no_diagonal(bm.T), [8,7]).T for bm in all_mice_beh_mat['H']])
+beh_h_col_means = np.nanmean(beh_h_no_diagonal, axis=1)
+
+beh_g_fam_mean = np.nanmean(beh_g_col_means[:, -2:], axis=1)
+beh_g_fam_mean_over_sessions = np.nanmean(beh_g_fam_mean)
+beh_g_fam_sem_over_sessions = np.nanstd(beh_g_fam_mean)/np.sum(~np.isnan(beh_g_fam_mean))**0.5
+
+beh_h_fam_mean = np.nanmean(beh_h_col_means[:, -2:], axis=1)
+beh_h_fam_mean_over_sessions = np.nanmean(beh_h_fam_mean)
+beh_h_fam_sem_over_sessions = np.nanstd(beh_h_fam_mean)/np.sum(~np.isnan(beh_h_fam_mean))**0.5
+
+beh_h_nov_mean = np.nanmean(beh_h_col_means[:, :-2], axis=1)
+beh_h_nov_mean_over_sessions = np.nanmean(beh_h_nov_mean)
+beh_h_nov_sem_over_sessions = np.nanstd(beh_h_nov_mean)/np.sum(~np.isnan(beh_h_nov_mean))**0.5
+
+ax.plot([beh_h_nov_mean_over_sessions, beh_h_fam_mean_over_sessions], 'o', color='r', ms=8)
+ax.errorbar(np.arange(2), [beh_h_nov_mean_over_sessions, beh_h_fam_mean_over_sessions], 
+                yerr=[beh_h_nov_sem_over_sessions, beh_h_fam_sem_over_sessions], color='r')
+
+ax.plot(1.1, beh_g_fam_mean_over_sessions, 'o', color='r', mfc='w', ms=8)
+ax.errorbar(1.1, beh_g_fam_mean_over_sessions, yerr=beh_g_fam_sem_over_sessions, color='r')
+    
+analysis.save_figure(fig, os.path.join(fig_save_dir, 'novelvsholdover_decoder_performance.pdf'))    
+
+
+
+
+
+##overlay population response with decoding performance over time
+fig, ax = plt.subplots()
+#for ip, p in enumerate('ABCDEF'):
+#   
+time = np.arange(200)
+resp = np.mean([c for c in p_cr_dict['C']['RS']['_H']['cr'][:-1]], axis=0)
+resp = resp - np.mean(resp[750:1000])
+resp = resp[1000:1200]
+ax.plot(time, resp/resp.max(), color=probe_colors[ip])
+
+ax2 = ax.twinx()
+decoder_time = 5*np.arange(40)
+mean_score = [np.mean(all_session_probe_score_ghsplit[probe][label][day_label], axis=0) for label in ['image', 'change']]
+sem_score = [np.std(all_session_probe_score_ghsplit[probe][label][day_label], axis=0)/len(all_session_probe_score_ghsplit[probe][label][day_label])**0.5 for label in ['image', 'change']]
+ax.plot(decoder_time, mean_score[0], 'k')       
+ax2.plot(decoder_time, mean_score[1], 'g')       
+
+# get opto behavior data
+opto_behavior = dict(np.load(r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2021\vgatDataForSAC2021.npz"))
+opto_time = [-5, 45, 78, 111, 151]
+opto_time_labels = [-5, 45, 78, 111, 'no opto']
+
+mouse_1_inds = np.arange(3)
+mouse_2_inds = np.arange(3, 6)
+
+mouse_1_hit = np.squeeze(opto_behavior['hitRate'][mouse_1_inds])
+mouse_2_hit = np.squeeze(opto_behavior['hitRate'][mouse_2_inds])
+fig, ax = plt.subplots()
+ax.plot(opto_time, np.mean(mouse_1_hit, axis=0), '0.5', alpha=0.5)
+ax.plot(opto_time, np.mean(mouse_2_hit, axis=0), '0.5', alpha=0.5)
+ax.plot(opto_time, np.mean([np.mean(mouse_1_hit, axis=0), np.mean(mouse_2_hit, axis=0)], axis=0), 'ko-')
+
+decoder_time = 5*np.arange(40) - 15
+ax2 = ax.twinx()
+ax2.plot(decoder_time, mean_score[1], 'g')
+ax2.fill_between(decoder_time, mean_score[1] - sem_score[1], mean_score[1] + sem_score[1], color='g', alpha=0.5)
+
+ax.set_xlim([-7, 155])
+formataxes(ax, xLabel='Time from change (ms)', yLabel='Mouse hit rate', spinesToHide=['top'])
+ax2.set_yticks([0.5, 0.6, 0.7, 0.8])
+analysis.save_figure(fig, os.path.join(fig_save_dir, 'opto_behavior_and_decoder_timecourse.pdf'))
+
+
+
+
+
+    

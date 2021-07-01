@@ -13,7 +13,9 @@ import pandas as pd
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", r"\\10.128.54.20\sd8"]
+sources = [r"\\10.128.50.43\sd6.3", 
+           r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2"]
 sessions_to_run = gs.get_sessions(sources, mouseID='!366122!548722', start_date='20200601')#, end_date='20200922')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
 modules_to_run = 'all' #['probe_targeting', 'behavior']
@@ -63,7 +65,7 @@ if run_only_missing_modules:
 
 failed = []
 session_errors = {}
-for ind, s in enumerate(sessions_to_run):
+for ind, s in enumerate(sessions_to_run[:2]):
     
     session_name = os.path.basename(s)
     session_modules_to_run = session_missing_modules[s] \

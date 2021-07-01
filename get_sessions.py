@@ -8,7 +8,7 @@ import os, glob
 import json
 import re
 
-def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, day1=True):
+def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, day1=True, limslength=[10]):
     '''Gets ephys sessions from root directory. 
     Takes only the directories in root with the expected format:
         10 digit lims ID, 6 digit mouseID and 8 digit date
@@ -28,7 +28,7 @@ def get_sessions(root, mouseID=None, start_date=None, end_date=None, rig=None, d
         in_dir = list_dir(root)
         
     dirs = [d for d in in_dir if (os.path.isdir(d) \
-                                  and validate_session_dir(d))]
+                                  and validate_session_dir(d, limslength))]
     
     for func, criterion in zip([mouseID_filter, start_date_filter, 
                                 end_date_filter, rig_filter, day1_filter],
@@ -45,10 +45,17 @@ def list_dir(root):
     return full_paths
 
 
-def validate_session_dir(d):
+def validate_session_dir(d, limslength):
     
     base = os.path.basename(d)
-    match = re.search('[0-9]{10}_[0-9]{6}_[0-9]{8}$', base)
+    if isinstance(limslength, list):
+        match = None
+        for l in limslength:
+            m = re.match('[0-9]{' + str(l)+'}_[0-9]{6}_[0-9]{8}$', base)
+            if m is not None:
+                match=m
+    else:
+        match = re.match('[0-9]{' + str(limslength)+'}_[0-9]{6}_[0-9]{8}$', base)
     
     return match is not None
 
@@ -101,8 +108,10 @@ def day1_filter(d, day1):
     filter_out = True
     if day1:
         base = os.path.basename(d)
-        lims_id = re.search('[0-9]{10}', base).group(0)
-        filter_out = lims_id[0] != '2'
+#        lims_id = re.search('[0-9]{10}', base).group(0)
+#        filter_out = lims_id[0] != '2'
+        lims_id_first_digit = base[0]
+        filter_out = lims_id_first_digit != '2'
         
     return filter_out
 

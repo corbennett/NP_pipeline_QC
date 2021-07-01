@@ -67,7 +67,7 @@ def plot_trial_type_pie(trial_counts, labels, save_dir, prefix=''):
     save_figure(fig, os.path.join(save_dir, prefix+'trial_type_piechart.png'))
 
 
-def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir, prefix=''):
+def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir=None, prefix=''):
     
     frame_times = np.copy(frame_times)
     frame_times = frame_times[behavior_start_frame:]
@@ -103,7 +103,8 @@ def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir, prefix
             ax.legend([lick_window_start], ['response win'])
             ax.set_ylabel('trials')     
     
-    save_figure(fig, os.path.join(save_dir, prefix+'trial_licks.png'))
+    if save_dir is not None:
+        save_figure(fig, os.path.join(save_dir, prefix+'trial_licks.png'))
 
     
 def save_figure(fig, save_path):

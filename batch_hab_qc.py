@@ -19,8 +19,10 @@ import pandas as pd
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3\habituation", r"\\10.128.50.20\sd7\habituation", r"\\10.128.50.20\sd7.2\habituation"]
-sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200901', end_date='20201101')
+sources = [r"\\10.128.50.43\sd6.3\habituation", r"\\10.128.50.20\sd7\habituation", 
+           r"\\10.128.50.20\sd7.2\habituation", r"\\10.128.54.20\sd8\habituation",
+           r"\\10.128.54.20\sd8.2\habituation", r"\\10.128.50.43\sd6.2\habituation"]
+sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20210510')#, end_date='20201101')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
 modules_to_run = ['vsyncs', 'behavior', 'probeSyncAlignment']
 cortical_sort = False

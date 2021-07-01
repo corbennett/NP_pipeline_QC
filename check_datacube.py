@@ -13,8 +13,9 @@ import json, os, glob
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2"]
-sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200930')#, end_date='20200922')
+sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2"]
+sessions_to_run = gs.get_sessions(sources, mouseID='!366122!544480', start_date='20200930')#, end_date='20200930')
 destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\mochi"
 
 qc_dirs = [os.path.join(destination, os.path.basename(s)) for s in sessions_to_run]
@@ -52,7 +53,7 @@ for geno in ['C57BL6J', 'Sst-IRES-Cre;Ai32', 'Vip-IRES-Cre;Ai32']:
     for mid in mid_dict:
         
         if mid_dict[mid]['genotype'] == geno:
-            print(mid, mid_dict[mid]['sessions'])
+            print(mid)#, mid_dict[mid]['sessions'])
 
 
 for geno in ['C57BL6J', 'Sst-IRES-Cre;Ai32', 'Vip-IRES-Cre;Ai32']:
@@ -68,4 +69,4 @@ for geno in ['C57BL6J', 'Sst-IRES-Cre;Ai32', 'Vip-IRES-Cre;Ai32']:
     for mid in mid_dict:
         
         if mid_dict[mid]['genotype'] == geno:
-            print(mid_dict[mid]['sessions'][1])
+            print(mid_dict[mid]['sessions'][-1])

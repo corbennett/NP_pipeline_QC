@@ -21,8 +21,11 @@ def getUnitData(probeBase,syncDataset):
     
     #Get barcodes/times from probe events and sync file
     be_t, be = get_ephys_barcodes(probeBase)
+    be_t, be = cut_bad_barcodes(be_t, be, 'ephys', threshold=30.8)
+    
     bs_t, bs = get_sync_barcodes(syncDataset)
-    bs_t, bs = cut_bad_sync_barcodes(bs_t, bs)
+    bs_t, bs = cut_bad_barcodes(bs_t, bs, 'sync')
+    
     
     #Compute time shift between ephys and sync
     shift, p_sampleRate, m_endpoints = ecephys.get_probe_time_offset(bs_t, bs, be_t, be, 0, 30000)
@@ -65,16 +68,16 @@ def get_sync_barcodes(sync_dataset, fallback_line=0):
     return bs_t, bs
 
 
-def cut_bad_sync_barcodes(bs_t, bs):
+def cut_bad_barcodes(bs_t, bs, source, threshold=30.95):
     
     if any(np.diff(bs_t)<30.95):
-        logging.warning('Detected bad barcode interval in sync, truncating data')
+        logging.warning('Detected bad barcode interval in {}, truncating data'.format(source))
         
         #find bad barcodes
-        bad_intervals = np.where(np.diff(bs_t)<30.95)[0]
+        bad_intervals = np.where(np.diff(bs_t)<threshold)[0]
         bad_barcode_indices = [bi+1 for bi in bad_intervals]
         
-        #find largest block of good barcodes to use for probe sample rate/offet
+        #find largest block of good barcodes to use for probe sample rate/offset
         bbi = np.insert(bad_barcode_indices, 0, 0)
         bbi = np.append(bbi, len(bs_t))
         good_block_sizes = np.diff(bbi)
