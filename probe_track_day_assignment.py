@@ -12,10 +12,13 @@ from matplotlib import pyplot as plt
 import glob
 import cv2
 import query_lims
+import probe_alignment_data_io as data_io
 
 
 #TODO: LOGGING!!! 
-mouseID = '571520'
+mouseID = '564012'
+ISI_pixels_per_micron = 0.44
+
 
 # Get D1 and D2 sessions for this mouse
 sources = [r"\\10.128.50.43\sd6.3", 
@@ -34,7 +37,7 @@ session_order = np.argsort(session_dates)
 
 session_dates = session_dates[session_order]
 session_limsids = np.array([get_limsID(s) for s in sessions_to_run])[session_order]
-sessions_to_run = sessions_to_run[session_order]
+sessions_to_run = np.array(sessions_to_run)[session_order]
 
 
 
@@ -85,7 +88,63 @@ axes[2].plot(insertion_points[1][0], insertion_points[1][1], 'b+', ms=10)
 axes[2].legend(['Day 1', 'Day 2'])
 
 
-   
+
+
+# GET INSERTION MOTOR COORDS FROM MOTOR LOC FILES
+# look for motor locs that are closest in time to the insertion image
+insertion_coords = []
+for ind, s in enumerate(sessions_to_run):
+    image_file = data_io.glob_file(s, '*surface-image3-left.png')[0]
+    insertion_time_stamp = data_io.get_modified_timestamp_from_file(image_file)
+    
+    motor_locs_file = data_io.glob_file(s, '*motor-locs.csv')[0]
+    motor_locs = data_io.read_motor_locs_into_dataframe(motor_locs_file)
+    motor_locs = motor_locs.loc[session_dates[ind]]
+    
+    session_insertion_coords = data_io.find_tap_coordinates(motor_locs,
+                                                    data_io.map_newscale_SNs_to_probes(motor_locs),
+                                                    insertion_time_stamp)
+
+    insertion_coords.append(session_insertion_coords)
+
+angles = {'A': [-14.21405475, -12.3231693,  -58.84145942],
+     'B': [ -17.34136572,  -13.18965862, -118.32166694],
+     'C': [ -16.93653005,  -12.27583101, -177.7143598 ],
+     'D': [-19.30100945, -16.39715103, 121.32239255],
+     'E': [-16.82130366, -13.54745601,  61.47706882],
+     'F': [-14.73266944, -13.27092408,   1.81126965]}
+
+
+def yaw(inputMat, a): # rotation around z axis (heading angle)
+    yawMat = np.array([[np.cos(a), -np.sin(a), 0],
+               [np.sin(a), np.cos(a), 0],
+               [0, 0, 1]])
+    return np.dot(inputMat,yawMat)
+
+
+motor_displacement = {}
+reticle_displacement = {}
+for p in insertion_coords[0]:
+    d1 = np.array(insertion_coords[0][p])
+    d2 = np.array(insertion_coords[1][p])
+    motor_displacement[p] = d2-d1
+    
+    p_angles = -np.array(angles[p])*np.pi/180
+    
+    #reticle_displacement[p] = probe_to_reticle([0,0,0], p_R, d2-d1)
+    reticle_displacement[p] = yaw(d2-d1, p_angles[2]+np.pi)*ISI_pixels_per_micron
+
+for ip, p in enumerate('ABCDEF'):
+    reticle_d1 = [insertion_points[0][0][ip], insertion_points[0][1][ip]]
+    displacement = reticle_displacement[p][:2]
+    axes[2].plot([reticle_d1[0], reticle_d1[0]+displacement[0]], [reticle_d1[1], reticle_d1[1] - displacement[1]])
+
+fig, ax = plt.subplots()
+for p in reticle_displacement:
+    ax.plot([0, reticle_displacement[p][0]], [0, reticle_displacement[p][1]])
+ax.legend(['A', 'B', 'C', 'D', 'E', 'F'])
+ax.set_aspect('equal')
+
 motor_locs_file = r"\\10.128.54.20\sd8.2\1108528422_571520_20210610\1108528422_571520_20210610.motor-locs.csv"
 
 
