@@ -26,7 +26,7 @@ import argparse
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
             FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, 
             response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix='',
-            save_rf_mat=False, plot=True): 
+            save_rf_mat=False, plot=True, stimulus_index=0): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
     rfs = {p:{k:[] for k in ['peak_channel', 'unitID', 'rfmat']} for p in probe_dict}
@@ -40,7 +40,7 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]
             rmats = []
             for ind, s in spikes.iterrows():
-                rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES)
+                rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES, stimulus_index=stimulus_index)
                 significant = get_significant_rf(rmat)
                 #if rmat.max()>response_thresh:
                 if significant:

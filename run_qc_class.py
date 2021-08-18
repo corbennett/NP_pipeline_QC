@@ -401,11 +401,11 @@ class run_qc():
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
-
+        
         ctx_units_percentile = 40 if not self.cortical_sort else 100
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
                 os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, 
-                prefix=self.figure_prefix, save_rf_mat=save_rf_mat)
+                prefix=self.figure_prefix, save_rf_mat=save_rf_mat, stimulus_index=0)
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
@@ -549,3 +549,64 @@ class run_qc_hab(run_qc):
         behavior_analysis.plot_trial_type_pie(counts, trial_types, behavior_plot_dir, prefix=self.figure_prefix)
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
         analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)
+        
+
+
+class run_qc_passive(run_qc):
+    
+    def _module_validation_decorator(data_streams):
+        ''' Decorator to handle calling the module functions below and supplying
+            the right data streams. 
+            INPUT: 
+                data_streams: This should be a list of the data streams required
+                    by this module function. Options are (as of 10/30/2020):
+                        'pkl' : all the pkl files
+                        'sync': syncdataset
+                        'unit': kilosort data, builds unit table
+                        'LFP': LFP data, builds lfp table
+        '''
+        def decorator(module_func):
+            def wrapper(self):
+                for d in data_streams:
+                    if not self.data_stream_status[d][0]:
+                        self.data_stream_status[d][1]()
+                module_func(self)
+        
+            return wrapper
+        return decorator
+    
+    def _load_pkl_data(self):
+        if not self.data_stream_status['sync'][0]:
+            self._load_sync_data()
+    
+        
+
+        self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
+
+        ### CHECK FRAME COUNTS ###
+
+        self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
+        
+
+        self.mapping_start_frame = 0
+        
+        self.data_stream_status['pkl'][0] = True
+        
+    
+    def _run_modules(self):
+        no_run_list = ['LFP', 'change_response', 'behavior']
+        module_list = [func for func in dir(self) if callable(getattr(self, func))]
+        for module in module_list:
+            if module[0] == '_' or module in no_run_list:
+                continue
+        
+            if module in self.modules_to_run or self.modules_to_run=='all':
+                func = getattr(self, module)
+                print('\n' + '#'*20)
+                print('Running module: {}\n'.format(module))
+                try:
+                    func()
+                except Exception as e:
+                    print('Error running module {}'.format(module))
+                    self.errors.append((module, e))
+

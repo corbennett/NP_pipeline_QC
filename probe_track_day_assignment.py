@@ -129,10 +129,10 @@ for p in insertion_coords[0]:
     d2 = np.array(insertion_coords[1][p])
     motor_displacement[p] = d2-d1
     
-    p_angles = -np.array(angles[p])*np.pi/180
+    p_angles = -np.array(angles[p])*np.pi/180 + np.pi #flip angles around y for some reason
     
     #reticle_displacement[p] = probe_to_reticle([0,0,0], p_R, d2-d1)
-    reticle_displacement[p] = yaw(d2-d1, p_angles[2]+np.pi)*ISI_pixels_per_micron
+    reticle_displacement[p] = yaw(d2-d1, p_angles[2])*ISI_pixels_per_micron 
 
 for ip, p in enumerate('ABCDEF'):
     reticle_d1 = [insertion_points[0][0][ip], insertion_points[0][1][ip]]

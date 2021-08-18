@@ -227,11 +227,11 @@ def probe_insertion_report(motor_locs_path, insertion_start_time, experiment_sta
     return report
 
      
-def plot_rf(mapping_pkl_data, spikes, first_frame_offset, frameAppearTimes, resp_latency=0.025, plot=True, returnMat=False):
+def plot_rf(mapping_pkl_data, spikes, first_frame_offset, frameAppearTimes, resp_latency=0.025, plot=True, returnMat=False, stimulus_index=0):
 
     
     rfFlashStimDict = mapping_pkl_data
-    rfStimParams = rfFlashStimDict['stimuli'][0] 
+    rfStimParams = rfFlashStimDict['stimuli'][stimulus_index] 
     rf_pre_blank_frames = int(rfFlashStimDict['pre_blank_sec']*rfFlashStimDict['fps'])
     first_rf_frame = first_frame_offset + rf_pre_blank_frames
     rf_frameTimes = frameAppearTimes[first_rf_frame:]

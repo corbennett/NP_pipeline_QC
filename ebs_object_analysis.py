@@ -372,7 +372,7 @@ with h5py.File(savepath,'a') as savefile:
   
 
 ### LOAD POPDATA FROM MEMORY ####
-loadfrommem = False
+loadfrommem = True
 if loadfrommem:
     combined_df = {}
     ebs.hdf5_to_dict(combined_df, r"C:\Data\NP_pipeline_h5s\popdata_with_times.h5")
@@ -381,6 +381,8 @@ if loadfrommem:
     combined_stim_df = {}
     ebs.hdf5_to_dict(combined_stim_df, r"C:\Data\NP_pipeline_h5s\popdata_stim_tables.h5")
 
+combined_df = pd.DataFrame.from_dict(combined_df)
+combined_stim_df = pd.DataFrame.from_dict(combined_stim_df)
 
 ### ANALYSIS ###
 g_image_list = combined_df.loc[combined_df['image_set'].str.contains('_G'),'image_list'].iloc[0]
@@ -1918,7 +1920,45 @@ ax2.set_yticks([0.5, 0.6, 0.7, 0.8])
 analysis.save_figure(fig, os.path.join(fig_save_dir, 'opto_behavior_and_decoder_timecourse.pdf'))
 
 
+## omission resposes larger widnow for shinya
 
+def omission_responses_over_rows(row, time_before=3, time_after=4):
+    sid = row['sessionID']
+    stim_table = combined_stim_df.loc[combined_stim_df['sessionID']==sid]
+    omission_times = stim_table.loc[stim_table['omitted']&(stim_table['active']), 'Start'].values
+    
+    psth = analysis.makePSTH_numba(row['times'], omission_times-time_before, time_before+time_after)
+    
+    return psth
+
+
+
+combined_df['omission_response_long_window'] = combined_df.apply(lambda row: omission_responses_over_rows(row), axis=1)
+
+good_unit_filter = ((combined_df['quality']=='good')&(combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1))
+gtoh_filter = (combined_df['mouseID']!='548722')
+array_save_path = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\omission_responses_for_shinya"
+for genotype in ('VIP', 'SST', 'RS', 'FS'):
+    fig, ax = plt.subplots()
+    fig.suptitle(genotype)
+    for setind, image_set in enumerate(('_G', '_H')):
+        
+        g_df = combined_df.loc[good_unit_filter&gtoh_filter&
+                                              (combined_df['cell_class']==genotype)&
+                                              (combined_df['image_set'].str.contains(image_set))]
+        
+        
+        o_response = np.stack(g_df['omission_response_long_window'])[:, 0, :]
+        np.save(os.path.join(array_save_path, genotype+image_set+'.npy'), o_response)
+        
+        time = np.stack(g_df['omission_response_long_window'])[0, 1, :] - 3
+        
+        ax.plot(time, np.mean(o_response, axis=0))
+        
+        
+        
+        
+        
 
 
     

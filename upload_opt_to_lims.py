@@ -190,7 +190,7 @@ if __name__ == "__main__":
     
     parser.add_argument("-s", "--source", 
                     help= "source directory for OPT data (probably on NAS)",
-                    default=r"\\10.128.50.20\sd7\OPT")
+                    default=r"\\10.128.54.20\sd8.2\OPT")
     
     parser.add_argument("-p", "--project", help="LIMS project name associated with experiment",
                     default= "NeuropixelVisualBehaviorDevelopment")
