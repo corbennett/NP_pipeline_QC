@@ -67,7 +67,7 @@ if run_only_missing_modules:
 
 failed = []
 session_errors = {}
-for ind, s in enumerate(sessions_to_run[:2]):
+for ind, s in enumerate(sessions_to_run):
     
     session_name = os.path.basename(s)
     session_modules_to_run = session_missing_modules[s] \

@@ -119,7 +119,8 @@ class run_qc():
                 self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
                 MONITOR_LAG = 0.036
     
-            self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+            #self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+            self.FRAME_APPEAR_TIMES = probeSync.get_experiment_frame_times(self.syncDataset) #trying new vsync method
             self.MONITOR_LAG = MONITOR_LAG
             self.vsync_times = np.copy(self.vf)
         except:
@@ -136,19 +137,20 @@ class run_qc():
     def _load_pkl_data(self):
         if not self.data_stream_status['sync'][0]:
             self._load_sync_data()
-    
-        self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
-        self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
-        self.replay_data = pd.read_pickle(self.REPLAY_PKL)
+        
+        
+        self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL) if not self.BEHAVIOR_PKL=='none found' else None
+        self.mapping_data = pd.read_pickle(self.MAPPING_PKL) if not self.MAPPING_PKL=='none found' else None
+        self.replay_data = pd.read_pickle(self.REPLAY_PKL) if not self.REPLAY_PKL=='none found' else None
         #self.opto_data = pd.read_pickle(self.OPTO_PKL)
 
-        self.trials = behavior_analysis.get_trials_df(self.behavior_data)
+        self.trials = behavior_analysis.get_trials_df(self.behavior_data) if self.behavior_data else None
 
         ### CHECK FRAME COUNTS ###
 
-        self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1
-        self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
-        self.replay_frame_count = self.replay_data['intervalsms'].size + 1
+        self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1 if self.behavior_data else 0
+        self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1 if self.mapping_data else 0
+        self.replay_frame_count = self.replay_data['intervalsms'].size + 1 if self.replay_data else 0
 
         self.total_pkl_frames = (self.behavior_frame_count +
                             self.mapping_frame_count +
@@ -181,7 +183,6 @@ class run_qc():
                                                                 [self.behavior_frame_count,
                                                                  self.mapping_frame_count,
                                                                  self.replay_frame_count])
-
         self.behavior_end_frame = self.behavior_start_frame + self.behavior_frame_count - 1
         self.mapping_end_frame = self.mapping_start_frame + self.mapping_frame_count - 1
         self.replay_end_frame = self.replay_start_frame + self.replay_frame_count - 1
@@ -397,15 +398,18 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def receptive_fields(self, save_rf_mat=False):
+    def receptive_fields(self, save_rf_mat=False, ctx_units_percentile=40, stimulus_index=0):
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
         
-        ctx_units_percentile = 40 if not self.cortical_sort else 100
+        if self.cortical_sort:
+            ctx_units_percentile = 100
+        #ctx_units_percentile = 40 if not self.cortical_sort else 100
+        
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
                 os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, 
-                prefix=self.figure_prefix, save_rf_mat=save_rf_mat, stimulus_index=0)
+                prefix=self.figure_prefix, save_rf_mat=save_rf_mat, stimulus_index=stimulus_index)
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
@@ -566,23 +570,34 @@ class run_qc_passive(run_qc):
                         'LFP': LFP data, builds lfp table
         '''
         def decorator(module_func):
-            def wrapper(self):
+            def wrapper(self, **kwargs):
                 for d in data_streams:
                     if not self.data_stream_status[d][0]:
                         self.data_stream_status[d][1]()
-                module_func(self)
+                module_func(self, **kwargs)
         
             return wrapper
         return decorator
+
     
     def _load_pkl_data(self):
         if not self.data_stream_status['sync'][0]:
             self._load_sync_data()
     
         
-
+        base_dir = os.path.dirname(self.SYNC_FILE)
+        mapping_pkl = glob.glob(os.path.join(base_dir, '*stim*concat.pkl'))[0]
+        self.MAPPING_PKL = mapping_pkl
+        print('Found mapping pkl: {}'.format(mapping_pkl))
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
-
+        self.mapping_stim_index = [istim for istim,stim in enumerate(self.mapping_data['stimuli']) if 'gabor' in stim['stim_path']]
+        
+        if len(self.mapping_stim_index)==0:
+            print('No mapping stim found in pkl file')
+            return
+        else:
+            self.mapping_stim_index=self.mapping_stim_index[0]
+            
         ### CHECK FRAME COUNTS ###
 
         self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
@@ -605,7 +620,11 @@ class run_qc_passive(run_qc):
                 print('\n' + '#'*20)
                 print('Running module: {}\n'.format(module))
                 try:
-                    func()
+                    if module=='receptive_fields':
+                        self._load_pkl_data()
+                        func(stimulus_index=self.mapping_stim_index)
+                    else:
+                        func()
                 except Exception as e:
                     print('Error running module {}'.format(module))
                     self.errors.append((module, e))

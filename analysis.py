@@ -1115,7 +1115,8 @@ def plot_opto_responses(probe_dict, opto_pkl, syncDataset, FIG_SAVE_DIR, prefix=
     opto_mats_dict = {p:{} for p in probe_dict}
     for probe in probe_dict:
         u_df = probe_dict[probe]
-        good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+        good_units = u_df[(u_df['snr']>1)&(u_df['isi_viol']<1)&(u_df['firing_rate']>0.1)]
+        #good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
         spikes = good_units['times']
         peakChans = good_units['peak_channel'].values
         unit_shank_order = np.argsort(peakChans)
