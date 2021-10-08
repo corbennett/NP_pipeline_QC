@@ -15,6 +15,11 @@ import logging
 from xml.dom.minidom import parse
 import visual_behavior
 
+#for vsync alignment
+from typing import Union
+import numpy as np
+import scipy.spatial.distance as distance
+
 def getUnitData(probeBase,syncDataset):
 
     probeSpikeDir = os.path.join(probeBase, r'continuous\\Neuropix-PXI-100.0')
@@ -355,6 +360,7 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
                 logging.error('Could not find matching sync frames for stim {}'.format(stim_num))
                 return
     
+    
     else:        
         start_frames = epoch_start_frames
     
@@ -569,7 +575,6 @@ def get_frame_exposure_times(sync_dataset, cam_json):
     return np.array(frame_times)
 
 
-
 def read_json(jsonfilepath):
     
     with open(jsonfilepath, 'r') as f:
@@ -577,4 +582,236 @@ def read_json(jsonfilepath):
     
     return contents
     
+
+###Functions to improve frame syncing###
+def get_experiment_frame_times(sync, photodiode_cycle=60):
     
+    photodiode_times = np.sort(np.concatenate([
+                    sync.get_rising_edges('stim_photodiode', 'seconds'),
+                    sync.get_falling_edges('stim_photodiode', 'seconds')
+                ]))
+    vsync_times = sync.get_falling_edges('vsync_stim', 'seconds')
+    stimstarts, stimends = get_stim_starts_ends(sync)
+    ccb_frame_times = []
+    
+    for ie, (start, end) in enumerate(zip(stimstarts, stimends)):
+        
+        epoch_vsyncs = vsync_times[(vsync_times>=start)&(vsync_times<=end)]
+        epoch_photodiodes = photodiode_times[(photodiode_times>=start)&(photodiode_times<=end)]
+        
+        frame_duration = estimate_frame_duration(
+                epoch_photodiodes, cycle=photodiode_cycle)
+        
+        ccb_times = get_ccb_frame_times(epoch_vsyncs, epoch_photodiodes, photodiode_cycle, frame_duration)
+        
+        ccb_frame_times.append(ccb_times)
+    
+    all_ccb_times = np.concatenate(ccb_frame_times)
+    
+    return all_ccb_times
+    
+    
+ 
+def get_ccb_frame_times(vsyncs, photodiode_times, photodiode_cycle, frame_duration):
+    
+    #removes blinking at beginning and end of each stimulus
+    photodiode_times = trim_border_pulses(
+                photodiode_times, vsyncs
+            )
+    
+    # not totally sure... correcting for on/off photodiode asymmetry
+    photodiode_times = correct_on_off_effects(
+        photodiode_times
+    )
+    
+    # fix blips in the line
+    photodiode_times = fix_unexpected_edges(
+        photodiode_times, cycle=photodiode_cycle)
+    
+    
+    return compute_frame_times_ccb(vsyncs, photodiode_times, frame_duration, 60)
+
+
+def compute_frame_times_ccb(
+    vsyncs, photodiode_times, frame_duration, cycle,
+):
+    
+    num_frames = len(vsyncs)
+    starts = np.zeros(num_frames, dtype=float)
+    vdiffs = np.diff(vsyncs)
+    
+    #trim photodiode times to make sure there are no strays at the end
+    photodiode_times = photodiode_times[:int(np.floor(len(vsyncs)/60)+1)]
+    print('num photodiode intervals used {}'.format(len(photodiode_times)))
+    
+    for start_index, (start_time, end_time) in enumerate(
+        zip(photodiode_times[:-1], photodiode_times[1:])
+    ):
+
+        interval_duration = end_time - start_time
+        these_vsyncs = vsyncs[start_index * cycle: (start_index + 1) * cycle]
+        these_vdiffs = vdiffs[start_index * cycle: (start_index + 1) * cycle]
+       # frame_duration = np.median(np.diff(these_vsyncs))
+        long_frame_time = np.sum(these_vdiffs) - cycle*frame_duration 
+        long_frame_time_in_frames = int(np.round(long_frame_time/frame_duration))
+        
+        extra_time_in_frames =(
+            int(np.around((interval_duration) / frame_duration))
+            - cycle
+        )
+        
+        extra_monitor_lag_in_frames = 0
+        if long_frame_time_in_frames<extra_time_in_frames:
+            print('extra monitor lag detected')
+            print(long_frame_time_in_frames)
+            print(extra_time_in_frames)
+            print(start_time)
+            extra_monitor_lag_in_frames = extra_time_in_frames - long_frame_time_in_frames
+            
+        
+            
+        local_frame_duration = interval_duration / (cycle + extra_time_in_frames)
+        #ideal_vsyncs = np.arange(start_time, end_time, frame_duration)
+        if extra_time_in_frames > 0:
+            
+            #find long frames and shift times accordingly
+            frame_diffs = np.round(np.diff(these_vsyncs)/local_frame_duration)
+            relative_vsyncs = np.insert(np.cumsum(frame_diffs*local_frame_duration), 0, 0)
+            
+            #assume that if there was a change in monitor lag, it was after the long frame
+            longest_ind = np.argmax(these_vdiffs)+1
+            relative_vsyncs[longest_ind:] += extra_monitor_lag_in_frames*local_frame_duration
+            
+        
+        else:
+            frame_diffs = np.ones(cycle-1)
+            relative_vsyncs = np.insert(np.cumsum(frame_diffs*local_frame_duration), 0, 0)
+        
+        starts[start_index * cycle: (start_index + 1) * cycle] = relative_vsyncs + start_time
+    
+    
+    #Now deal with leftover frames that occur after the last diode transition
+    #Just take the global frame duration for these
+    leftover_frames_first_ind = len(starts) - np.mod(len(starts), cycle)
+    these_vsyncs = vsyncs[leftover_frames_first_ind:]
+    frame_diffs = np.round(np.diff(these_vsyncs)/frame_duration)
+    print('processing {} leftover frames after last diode transition'.format(len(these_vsyncs)))
+    relative_vsyncs = np.insert(np.cumsum(frame_diffs*frame_duration), 0, 0)
+    starts[leftover_frames_first_ind:] = photodiode_times[-1]+relative_vsyncs
+    
+    return starts
+
+
+def trim_border_pulses(pd_times, vs_times, frame_interval=1/60, num_frames=3):
+    pd_times = np.array(pd_times)
+    pd_times = pd_times[np.logical_and(
+        pd_times >= vs_times[0],
+        pd_times <= vs_times[-1] + num_frames * frame_interval
+    )]
+    
+    print('last photodiode transition {}'.format(pd_times[-1]))
+    print('last vsyncs time plus buffer {}'.format(vs_times[-1] + num_frames * frame_interval))
+    print('num expected diode transitions {}'.format(np.floor(len(vs_times)/60)+1))
+    print('num actual diode transitions {}'.format(len(pd_times)))
+    return pd_times
+
+
+def correct_on_off_effects(pd_times):
+    """
+    Notes
+    -----
+    This cannot (without additional info) determine whether an assymmetric
+    offset is odd-long or even-long.
+    """
+
+    pd_diff = np.diff(pd_times)
+    odd_diff_mean, odd_diff_std = trimmed_stats(pd_diff[1::2])
+    even_diff_mean, even_diff_std = trimmed_stats(pd_diff[0::2])
+
+    half_diff = np.diff(pd_times[0::2])
+    full_period_mean, full_period_std = trimmed_stats(half_diff)
+    half_period_mean = full_period_mean / 2
+
+    odd_offset = odd_diff_mean - half_period_mean
+    even_offset = even_diff_mean - half_period_mean
+
+    pd_times[::2] -= odd_offset / 2
+    pd_times[1::2] -= even_offset / 2
+
+    return pd_times
+
+
+def flag_unexpected_edges(pd_times, ndevs=10):
+    pd_diff = np.diff(pd_times)
+    diff_mean, diff_std = trimmed_stats(pd_diff)
+
+    expected_duration_mask = np.ones(pd_diff.size)
+    expected_duration_mask[np.logical_or(
+        pd_diff < diff_mean - ndevs * diff_std,
+        pd_diff > diff_mean + ndevs * diff_std
+    )] = 0
+    expected_duration_mask[1:] = np.logical_and(
+        expected_duration_mask[:-1], expected_duration_mask[1:]
+    )
+    expected_duration_mask = np.concatenate(
+        [expected_duration_mask, [expected_duration_mask[-1]]]
+    )
+
+    return expected_duration_mask
+
+
+def fix_unexpected_edges(pd_times, ndevs=10, cycle=60, max_frame_offset=4):
+    pd_times = np.array(pd_times)
+    expected_duration_mask = flag_unexpected_edges(pd_times, ndevs=ndevs)
+    diff_mean, diff_std = trimmed_stats(np.diff(pd_times))
+    frame_interval = diff_mean / cycle
+
+    bad_edges = np.where(expected_duration_mask == 0)[0]
+    bad_blocks = np.sort(np.unique(np.concatenate([
+        [0],
+        np.where(np.diff(bad_edges) > 1)[0] + 1,
+        [len(bad_edges)]
+    ])))
+
+    output_edges = []
+    for low, high in zip(bad_blocks[:-1], bad_blocks[1:]):
+        current_bad_edge_indices = bad_edges[low: high-1]
+        current_bad_edges = pd_times[current_bad_edge_indices]
+        low_bound = pd_times[current_bad_edge_indices[0]]
+        high_bound = pd_times[current_bad_edge_indices[-1] + 1]
+
+        edges_missing = int(np.around((high_bound - low_bound) / diff_mean))
+        expected = np.linspace(low_bound, high_bound, edges_missing + 1)
+
+        distances = distance.cdist(
+            current_bad_edges[:, None], expected[:, None]
+        )
+        distances = np.around(distances / frame_interval).astype(int)
+
+        min_offsets = np.amin(distances, axis=0)
+        min_offset_indices = np.argmin(distances, axis=0)
+        output_edges = np.concatenate([
+            output_edges,
+            expected[min_offsets > max_frame_offset],
+            current_bad_edges[
+                min_offset_indices[min_offsets <= max_frame_offset]
+            ]
+        ])
+
+    return np.sort(
+        np.concatenate([output_edges, pd_times[expected_duration_mask > 0]])
+    )
+
+def trimmed_stats(data, pctiles=(10, 90)):
+    low = np.percentile(data, pctiles[0])
+    high = np.percentile(data, pctiles[1])
+
+    trimmed = data[np.logical_and(
+        data <= high,
+        data >= low
+    )]
+
+    return np.mean(trimmed), np.std(trimmed)   
+
+def estimate_frame_duration(pd_times, cycle=60):
+    return trimmed_stats(np.diff(pd_times))[0] / cycle
