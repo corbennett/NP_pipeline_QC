@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QPalette, QColor
 import cv2
 import os, glob
+import subprocess
 from datetime import datetime
 import json
 
@@ -51,6 +52,9 @@ class D2_validation_tool():
 		self.lims_pass = None
 		self.probes_to_run = 'ABCDEF'
 		self.acq_computer_name = None
+		self.session_directory = None
+		self.limsID = None
+		self.previousSessionID = 'Session ID'
 
 		self.default_button_background = "background-color: rgb(220, 220, 220)"
 
@@ -65,7 +69,7 @@ class D2_validation_tool():
 		self.mainLayout.addLayout(self.controlPanelLayout, 0, 0)
 
 		self.sessionIDBox = QLineEdit('Session ID')
-		self.sessionIDBox.returnPressed.connect(self.set_session)
+		self.sessionIDBox.editingFinished.connect(self.set_session)
 		self.controlPanelLayout.addWidget(self.sessionIDBox, 0, 0, 1, 1)
 
 		self.probesToRunBox = QLineEdit('ABCDEF')
@@ -87,6 +91,11 @@ class D2_validation_tool():
 		self.copyFilesButton.clicked.connect(self.copy_data_for_d2_lims_upload)
 		self.controlPanelLayout.addWidget(self.copyFilesButton, 0, 3, 1, 1)
 
+		self.uploadButton = QPushButton('Initiate Upload to LIMS')
+		self.uploadButton.setStyleSheet(self.default_button_background)
+		self.uploadButton.clicked.connect(self.initiate_d2_upload)
+		self.controlPanelLayout.addWidget(self.uploadButton, 1, 1, 1, 1)
+
 		self.logOutput = QTextEdit()
 		self.logOutput.setStyleSheet("color:white")
 		self.logOutput.setReadOnly(True)
@@ -99,31 +108,37 @@ class D2_validation_tool():
 
 	def set_session(self):
 		self.sessionID = self.sessionIDBox.text()
+		if self.previousSessionID != self.sessionID:
+			try:
+				if os.path.exists(self.sessionID):
+					self.logOutput.append('\nSession ID is already a valid path\n'
+						'Verifying that it is a valid session directory')
+					if gs.validate_session_dir(self.sessionID, [9, 10]):
+						self.session_directory = self.sessionID
+						self.sessionID = os.path.basename(self.session_directory)
+				else:
+					self.session_directory = gs.get_sessions(sources, limsID=self.sessionID)
+					if len(self.session_directory) == 0:
+						self.logOutput.append('\nCould not find session directory for session {}'.format(self.sessionID))
+					else:
+						self.session_directory = self.session_directory[0]
 
-		if os.path.exists(self.sessionID):
-			self.logOutput.append('\nSession ID is already a valid path\n'
-				'Verifying that it is a valid session directory')
-			if gs.validate_session_dir(self.sessionID, [9, 10]):
-				self.session_directory = self.sessionID
-				self.sessionID = os.path.basename(self.session_directory)
-		else:
-			self.session_directory = gs.get_sessions(sources, limsID=self.sessionID)
-			if len(self.session_directory) == 0:
-				self.logOutput.append('\nCould not find session directory for session {}'.format(self.sessionID))
-			else:
-				self.session_directory = self.session_directory[0]
+				self.limsID = self.sessionID.split('_')[0]
+				self.logOutput.append('\nset session to {}'.format(self.sessionID))
+				self.logOutput.append('found session directory {}'.format(self.session_directory))			
+				self.reset()
+			
+			except Exception as e:
+				self.logOutput.append('Could not set session to {}, due to error {}'
+					.format(self.sessionIDBox.text(), e))
 
-		self.limsID = self.sessionID.split('_')[0]
-		self.logOutput.append('\nset session to {}'.format(self.sessionID))
-		self.logOutput.append('found session directory {}'.format(self.session_directory))
-
-		self.reset()
-
+	
 	def reset(self):
 		self.passed_d2_local_validation = None
 		self.lims_pass = None
 		self.probes_to_run = 'ABCDEF'
 		self.acq_computer_name = None
+		self.previousSessionID = self.sessionID
 
 		self.checkLIMSButton.setStyleSheet(self.default_button_background)
 		self.validateLocalFilesButton.setStyleSheet(self.default_button_background)
@@ -136,58 +151,65 @@ class D2_validation_tool():
 
 	def check_LIMS(self):
 
-		lims_results_save_path = os.path.join(self.session_directory, 'lims_upload_report_'+str(self.limsID)+'.json')
-		self.logOutput.append('checking LIMS for session {} \n Saving full results to {}'
-			.format(self.limsID, lims_results_save_path))
-		lims_validation_results = run_validation(self.limsID, lims_results_save_path)
-		
-		for lims_upload_day, common_string in zip(['D1_upload_summary', 'D2_upload_summary'], 
-			['Raw data', 'Sorted data']):
-			if lims_validation_results[lims_upload_day]['upload_exists']:
-				upload_pass = lims_validation_results[lims_upload_day]['pass']
-				if upload_pass:
-					self.logOutput.append(common_string + ' lims upload confirmed!\n')
+		try:
+			lims_results_save_path = os.path.join(self.session_directory, 'lims_upload_report_'+str(self.limsID)+'.json')
+			self.logOutput.append('\nChecking LIMS for session {} \nSaving full results to {}'
+				.format(self.limsID, lims_results_save_path))
+			lims_validation_results = run_validation(self.limsID, lims_results_save_path)
+			
+			for lims_upload_day, common_string in zip(['D1_upload_summary', 'D2_upload_summary'], 
+				['Raw data', 'Sorted data']):
+				if lims_validation_results[lims_upload_day]['upload_exists']:
+					upload_pass = lims_validation_results[lims_upload_day]['pass']
+					if upload_pass:
+						self.logOutput.append(common_string + ' lims upload confirmed!')
+					else:
+						self.logOutput.append(common_string + ' lims upload failed due to following errors: \n')
+						for e in lims_validation_results[lims_upload_day]['errors']:
+							self.logOutput.append(e)
+						if lims_upload_day == 'D1_upload_summary':
+							self.logOutput.append('\nThe raw data for this experiment is not yet in LIMS. \n'
+								'Please make sure the raw data is uploaded before proceeding')
+							break 
+
 				else:
-					self.logOutput.append(common_string + ' lims upload failed due to following errors: \n')
-					for e in lims_validation_results[lims_upload_day]['errors']:
-						self.logOutput.append(e)
+					self.logOutput.append(common_string + ' lims upload missing \n')
+
 					if lims_upload_day == 'D1_upload_summary':
-						self.logOutput.append('\nThe raw data for this experiment is not yet in LIMS. \n'
+						self.logOutput.append('The raw data for this experiment is not yet in LIMS.\n'
 							'Please make sure the raw data is uploaded before proceeding')
-						break 
+						break
+					else:
+						self.logOutput.append('Please proceed to upload the sorting data \n')
 
+			self.lims_pass = (lims_validation_results['D1_upload_summary']['pass'] and 
+				lims_validation_results['D2_upload_summary']['pass'])
+
+			if self.lims_pass:
+				self.checkLIMSButton.setStyleSheet("background-color: rgb(0, 200, 0)")
 			else:
-				self.logOutput.append(common_string + ' lims upload missing \n')
+				self.checkLIMSButton.setStyleSheet("background-color: rgb(200, 0, 0)")
+		except Exception as e:
 
-				if lims_upload_day == 'D1_upload_summary':
-					self.logOutput.append('The raw data for this experiment is not yet in LIMS.\n'
-						'Please make sure the raw data is uploaded before proceeding')
-					break
-				else:
-					self.logOutput.append('Please proceed to upload the sorting data \n')
+			self.logOutput.append('Could not check LIMS for session due to error {}'.format(e))
 
-		self.lims_pass = (lims_validation_results['D1_upload_summary']['pass'] and 
-			lims_validation_results['D2_upload_summary']['pass'])
 
-		if self.lims_pass:
-			self.checkLIMSButton.setStyleSheet("background-color: rgb(0, 200, 0)")
-		else:
-			self.checkLIMSButton.setStyleSheet("background-color: rgb(200, 0, 0)")
-
-	
 	def validate_d2_files_for_upload(self):
 		
-		self.get_acq_computername()
-		self.logOutput.append('validating local files for session {}'.format(self.sessionID))
-		self.passed_d2_local_validation = validate_local_d2(self.sessionID, self.acq_computer_name)
-		if self.passed_d2_local_validation:
-			self.logOutput.append('Session {} passed local file validation (all files on E drive)'.format(self.sessionID))
-			self.validateLocalFilesButton.setStyleSheet("background-color: rgb(0, 200, 0)")
-		else:
-			self.logOutput.append('Session {} FAILED local file validation (see console for details)'.format(self.sessionID))
-			self.validateLocalFilesButton.setStyleSheet("background-color: rgb(200, 0, 0)")
+		try:
+			self.get_acq_computername()
+			self.logOutput.append('validating local files for session {}'.format(self.sessionID))
+			self.passed_d2_local_validation = validate_local_d2(self.sessionID, self.acq_computer_name)
+			if self.passed_d2_local_validation:
+				self.logOutput.append('Session {} passed local file validation (all files on E drive)'.format(self.sessionID))
+				self.validateLocalFilesButton.setStyleSheet("background-color: rgb(0, 200, 0)")
+			else:
+				self.logOutput.append('Session {} FAILED local file validation (see console for details)'.format(self.sessionID))
+				self.validateLocalFilesButton.setStyleSheet("background-color: rgb(200, 0, 0)")
+		except Exception as e:
+			self.logOutput.append('Could not validate d2 files for session due to error {}'.format(e))
 
-
+	
 	def get_acq_computername(self):
 		computer_name_dict = {'NP.0': 'W10dt05515',
 								'NP.1': 'W10dt05501'}
@@ -209,7 +231,7 @@ class D2_validation_tool():
 				computer_name = None
 		
 		self.acq_computer_name = computer_name
-		self.logOutput.append('Looking for local sorting files on {}'.format(computer_name))
+		self.logOutput.append('\nLooking for local sorting files on {}'.format(computer_name))
 
 
 	def copy_data_for_d2_lims_upload(self):
@@ -224,7 +246,35 @@ class D2_validation_tool():
 				self.logOutput.append(message)
 
 
-	
+	def initiate_d2_upload(self):
+		
+		if self.lims_pass is None:
+			self.logOutput.append('\nPlease check lims for files before attempting upload')
+			return
+
+		elif self.lims_pass:
+			self.logOutput.append('\nLims data for this session already exists. Aborting upload.')
+			return
+
+		if not self.passed_d2_local_validation:
+			self.logOutput.append('\nPlease validate local files before attempting upload')
+
+		else:
+			try:
+				initialUploadBoxReply = QMessageBox.question(self.mainWin, 'Initiate LIMS upload', 
+					'Please confirm that you would like to upload session {} to LIMS'.format(self.sessionID), 
+					QMessageBox.Ok | QMessageBox.No)
+				if initialUploadBoxReply == QMessageBox.Ok:
+					out = subprocess.check_call(r"C:\Program Files\AIBS_MPE\createDay2\createDay2.exe"+' --sessionid '+ self.limsID)
+					if out==0:
+						self.logOutput.append('\nLIMS upload successfully initated for session {}'.format(self.limsID))
+				else:
+					self.logOutput.append('\nAborting LIMS upload for session {}'.format(self.sessionID))
+			except Exception as e:
+				self.logOutput.append('\nCould not initiate d2 upload for session {}, due to error {}'
+					.format(self.limsID, e))	
+
+		
 
 	def closeEvent(self, event):
 		pass

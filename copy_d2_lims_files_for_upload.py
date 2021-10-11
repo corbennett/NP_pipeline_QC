@@ -90,10 +90,10 @@ def transfer_session(session_base_dir, probes_to_run = 'ABCDEF', rig_dir_dict=No
                 p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
                 print(p_dest_dir)
                 return_string.append('Destination Directory {}\n'.format(p_dest_dir))
-                #transfer_d2_files(pd, p_dest_dir, file_dict)
+                transfer_d2_files(pd, p_dest_dir, file_dict)
     except:
-            for ind in [0,1,2]:
-                return_string.append(str(sys.exc_info()[ind]))
+        for ind in [0,1,2]:
+            return_string.append(str(sys.exc_info()[ind]))
     
     return return_string    
 

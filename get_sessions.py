@@ -121,7 +121,7 @@ def limsID_filter(d, limsID):
     base = os.path.basename(d)
     d_limsID = re.match(str(limsID), base)
     
-    return d_limsID is not None
+    return (d_limsID is not None) and len(limsID)>8
     
     
 def apply_filter(dirs, filter_func, criterion):
