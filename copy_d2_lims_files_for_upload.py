@@ -4,7 +4,7 @@ Created on Mon Sep 14 17:08:13 2020
 
 @author: svc_ccg
 """
-import os, glob, re
+import os, glob, re, sys
 from collections import namedtuple, OrderedDict
 import subprocess
 import logging
@@ -56,33 +56,46 @@ data_files = {
 #        }
 
 
-def transfer_session(session_base_dir, probes_to_run = 'ABCDEF'):
-    
-    rig = get_rig(session_base_dir)
-    lims_dir = rig_limsdirectory_dict[rig]
-    
-    probe_dirs = get_probe_directories(session_base_dir)
-    
-    #FIRST VALIDATE THAT ALL FILES ARE PRESENT FOR ALL PROBES; DONT TRANSFER PARTIAL SESSIONS
-    for pd in probe_dirs:   
-        pid = get_probe_id_from_dir(pd)
-        if pid in probes_to_run:
-            file_dict = validate_d2_files(pd)
-            missing = [not(f['exists']) for _,f in file_dict.items()]
-            if any(missing):
-                print('Must have all D2 files before transfer can take place')
-                return
+def transfer_session(session_base_dir, probes_to_run = 'ABCDEF', rig_dir_dict=None):
+    return_string = []
+    try: 
+        rig = get_rig(session_base_dir)
+        
+        if rig_dir_dict:
+            lims_dir = rig_dir_dict[rig]
+        else:
+            lims_dir = rig_limsdirectory_dict[rig]
+        
+        probe_dirs = get_probe_directories(session_base_dir)
+        
+        #FIRST VALIDATE THAT ALL FILES ARE PRESENT FOR ALL PROBES; DONT TRANSFER PARTIAL SESSIONS
+        for pd in probe_dirs:   
+            pid = get_probe_id_from_dir(pd)
+            if pid in probes_to_run:
+                file_dict = validate_d2_files(pd)
+                missing = [not(f['exists']) for _,f in file_dict.items()]
+                if any(missing):
+                    out = 'Must have all D2 files before transfer can take place'
+                    print(out)
+                    return_string.append(out)
+                    return return_string
 
-    #IF ALL SESSIONS LOOK GOOD, START TRANSFER            
-    for pd in probe_dirs:   
-        pid = get_probe_id_from_dir(pd)
-        if pid in probes_to_run:
-            file_dict = validate_d2_files(pd)
-            print(pd)
-            p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
-            print(p_dest_dir)
-            transfer_d2_files(pd, p_dest_dir, file_dict)
+        #IF ALL SESSIONS LOOK GOOD, START TRANSFER            
+        for pd in probe_dirs:   
+            pid = get_probe_id_from_dir(pd)
+            if pid in probes_to_run:
+                file_dict = validate_d2_files(pd)
+                print(pd)
+                return_string.append('Probe Directory {}'.format(pd))
+                p_dest_dir = os.path.join(lims_dir, os.path.basename(pd))
+                print(p_dest_dir)
+                return_string.append('Destination Directory {}\n'.format(p_dest_dir))
+                #transfer_d2_files(pd, p_dest_dir, file_dict)
+    except:
+            for ind in [0,1,2]:
+                return_string.append(str(sys.exc_info()[ind]))
     
+    return return_string    
 
 def get_probe_id_from_dir(dirname):
     
