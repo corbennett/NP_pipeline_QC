@@ -203,7 +203,7 @@ class lims_data_getter(data_getter):
         
     def translate_wkf_names(self):
         wkf_dict = {
-                'StimulusPickle': 'mapping_pkl',
+                'MappingPickle': 'mapping_pkl',
                 'EcephysReplayStimulus': 'replay_pkl',
                 'EcephysRigSync': 'sync_file',
                 'OptoPickle': 'opto_pkl'}
@@ -235,8 +235,8 @@ class local_data_getter(data_getter):
                 'RawBehaviorTrackingVideo': ['*behavior.avi', '*behavior.mp4'],
                 'RawFaceTrackingVideo': ['*face.avi', '*face.mp4'],
                 'RawEyeTrackingVideoMetadata': '*eye.json',
-                'RawBehaviorTrackingVideoMetadata': '*face.json',
-                'RawFaceTrackingVideoMetadata': '*behavior.json',
+                'RawBehaviorTrackingVideoMetadata': '*behavior.json',
+                'RawFaceTrackingVideoMetadata': '*face.json',
                 'EcephysPlatformFile': '*platformD1.json',
                 'NewstepConfiguration': '*motor-locs.csv'
                 }

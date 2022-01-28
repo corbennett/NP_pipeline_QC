@@ -509,6 +509,7 @@ def get_network_dir(path):
                     r'\\10.128.54.20\sd8',
                     r'\\10.128.54.20\sd8.2',
                     r'\\10.128.54.20\sd8.3',
+                    r"\\10.128.54.19\sd9"
                     ]
 
     for vol in vols_to_check:

@@ -14,6 +14,11 @@ import data_getters
 import build_stim_tables
 import h5py
 from query_lims import query_lims
+import cv2
+
+eye_cam_dict = {'Eye': 'RawEyeTrackingVideo',
+                        'Face': 'RawFaceTrackingVideo', 
+                        'Side': 'RawBehaviorTrackingVideo'}
 
 class EcephysBehaviorSession():
     '''Get all data from a Visual Behavior Ecephys experiment.
@@ -63,6 +68,7 @@ class EcephysBehaviorSession():
         self._trials = None
         self._lfp = None
         self._stim_epochs = None
+        self._video_data = None
         self._experiment_info = loaddict.get('experiment_info')
         self._frame_times = loaddict.get('frame_times')
         self._reward_times = loaddict.get('reward_times')
@@ -222,7 +228,27 @@ class EcephysBehaviorSession():
     def lfp(self, value):
         self._lfp = value
         
+    
+    @property
+    def video_data(self):
         
+        #video_paths = [self.data_paths[eye_cam_dict[vid]] for vid in ['Eye', 'Face', 'Side']]
+        if self._video_data is None:
+            self._video_data = {}
+            for vid in ['Eye', 'Face', 'Side']:
+                try:
+                    self._video_data[vid] = cv2.VideoCapture(self.data_paths[eye_cam_dict[vid]])
+                except Exception as e:
+                    print('could not load video {} due to error {}'.format(vid, e))
+        
+        return self._video_data
+
+
+    @video_data.setter
+    def video_data(self, value):
+        self._video_data = value
+                     
+    
     @property
     def stim_epochs(self):
         

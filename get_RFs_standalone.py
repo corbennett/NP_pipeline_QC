@@ -34,11 +34,13 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
         try:
             print(f'########## Getting RFs for probe {p} ###########')
             u_df = probe_dict[p]
-            good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
-         
+            #good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+            good_units = u_df[(u_df['snr']>1)&(u_df['isi_viol']<1)&(u_df['firing_rate']>0.1)]
+
             ctx_bottom_chan = np.percentile(good_units['peak_channel'], 100-ctx_units_percentile)
-            spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]
-            rmats = []
+            #spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]
+            spikes = good_units
+            ctx_rmats = []
             for ind, s in spikes.iterrows():
                 rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES, stimulus_index=stimulus_index)
                 significant = get_significant_rf(rmat)
@@ -47,13 +49,14 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
                     rfs[p]['peak_channel'].append(s['peak_channel'])
                     rfs[p]['unitID'].append(s['Unnamed: 0'])
                     rfs[p]['rfmat'].append(rmat)
-                    rmats.append(rmat/rmat.max())
+                    if s['peak_channel']>ctx_bottom_chan:
+                        ctx_rmats.append(rmat/rmat.max())
                 
-            rmats_normed_mean = np.nanmean(rmats, axis=0)
+            rmats_normed_mean = np.nanmean(ctx_rmats, axis=0)
          
             if plot:
                 rfig = plt.figure(constrained_layout=True, figsize=[6,6])
-                title = p + ' population RF: {} units'.format(len(rmats))   
+                title = p + ' population RF: {} units'.format(len(ctx_rmats))   
                 rfig.suptitle(title, color='w')
                 
                 nrows, ncols = 10,10
@@ -141,7 +144,7 @@ def plot_tiled_rfs(rfdict, FIG_SAVE_DIR, chan_bin = 8, max_rows=20, max_cols=20,
                 b_rfs = b_rfs[:ncols]
             for ir, rr in enumerate(b_rfs):
                 rrmean = np.mean(rr, axis=2)
-                ax = axes[nrows - 1 - ib][ir]
+                ax = axes[nrows - 1 - b][ir]
                 ax.set_visible(True)
                 ax.tick_params(top=False, bottom=False, left=False, right=False, labelleft=False, labelbottom=False)
                 ax.imshow(rrmean, origin='lower')

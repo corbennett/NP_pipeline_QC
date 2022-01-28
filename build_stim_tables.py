@@ -12,6 +12,7 @@ from allensdk.brain_observatory.ecephys.stimulus_table.ephys_pre_spikes import b
 from allensdk.brain_observatory.ecephys.file_io.stim_file import (
     CamStimOnePickleStimFile,
 )
+import probeSync_qc as probeSync
 from functools import partial
 import numpy as np
 import logging
@@ -37,7 +38,8 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
     tolerance = tolerance/100.
     
     # get vsyncs and stim_running signals from sync
-    vf = get_vsyncs(sync_dataset)
+    #vf = get_vsyncs(sync_dataset)
+    vf = probeSync.get_experiment_frame_times(sync_dataset)
     stimstarts, stimoffs = get_stim_starts_ends(sync_dataset)
     
     # get vsync frame lengths for all stimuli
@@ -81,7 +83,7 @@ def generate_behavior_stim_table(pkl_data, sync_dataset, frame_offset=0, block_o
     num_frames = p['items']['behavior']['intervalsms'].size + 1
     reward_frames = p['items']['behavior']['rewards'][0]['reward_times'][:, 1]
     
-    frame_timestamps = get_vsyncs(sync_dataset)
+    frame_timestamps = probeSync.get_experiment_frame_times(sync_dataset)#get_vsyncs(sync_dataset)
     reward_times = frame_timestamps[reward_frames.astype(int)]
     epoch_timestamps = frame_timestamps[frame_offset:frame_offset+num_frames]
     
@@ -134,7 +136,7 @@ def generate_replay_stim_table(pkl_data, sync_dataset, behavior_stim_table, bloc
     num_frames = p['intervalsms'].size + 1
     
     
-    frame_timestamps = get_vsyncs(sync_dataset)
+    frame_timestamps = probeSync.get_experiment_frame_times(sync_dataset)#get_vsyncs(sync_dataset)
     frame_timestamps = frame_timestamps[frame_offset:frame_offset+num_frames]
     
     ims = p['stimuli'][0]['sweep_params']['ReplaceImage'][0]
@@ -197,7 +199,7 @@ def generate_mapping_stim_table(pkl_data, sync_dataset, block_offset=1, frame_of
     stim_table = create_stim_table(stim_file.stimuli, stim_tabler, make_spontaneous_activity_tables)
     
     
-    frame_timestamps = get_vsyncs(sync_dataset)
+    frame_timestamps = probeSync.get_experiment_frame_times(sync_dataset)#get_vsyncs(sync_dataset)
     
     stim_table = stim_table.rename(columns={'Start':'start_frame', 'End':'end_frame'})
     stim_table['start_frame'] = np.array(stim_table['start_frame']).astype(int) + frame_offset

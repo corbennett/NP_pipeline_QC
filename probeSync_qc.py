@@ -584,7 +584,7 @@ def read_json(jsonfilepath):
     
 
 ###Functions to improve frame syncing###
-def get_experiment_frame_times(sync, photodiode_cycle=60):
+def get_experiment_frame_times(sync, photodiode_cycle=60, method='ccb'):
     
     photodiode_times = np.sort(np.concatenate([
                     sync.get_rising_edges('stim_photodiode', 'seconds'),
@@ -601,8 +601,8 @@ def get_experiment_frame_times(sync, photodiode_cycle=60):
         
         frame_duration = estimate_frame_duration(
                 epoch_photodiodes, cycle=photodiode_cycle)
-        
-        ccb_times = get_ccb_frame_times(epoch_vsyncs, epoch_photodiodes, photodiode_cycle, frame_duration)
+               
+        ccb_times = get_ccb_frame_times(epoch_vsyncs, epoch_photodiodes, photodiode_cycle, frame_duration, method=method)
         
         ccb_frame_times.append(ccb_times)
     
@@ -612,7 +612,7 @@ def get_experiment_frame_times(sync, photodiode_cycle=60):
     
     
  
-def get_ccb_frame_times(vsyncs, photodiode_times, photodiode_cycle, frame_duration):
+def get_ccb_frame_times(vsyncs, photodiode_times, photodiode_cycle, frame_duration, method='ccb'):
     
     #removes blinking at beginning and end of each stimulus
     photodiode_times = trim_border_pulses(
@@ -629,7 +629,10 @@ def get_ccb_frame_times(vsyncs, photodiode_times, photodiode_cycle, frame_durati
         photodiode_times, cycle=photodiode_cycle)
     
     
-    return compute_frame_times_ccb(vsyncs, photodiode_times, frame_duration, 60)
+    if method == 'ccb':
+        return compute_frame_times_ccb(vsyncs, photodiode_times, frame_duration, 60)
+    elif method == 'tech':
+        return compute_vbn_block_frame_times(vsyncs, photodiode_times, frame_duration, 60)
 
 
 def compute_frame_times_ccb(
@@ -672,7 +675,7 @@ def compute_frame_times_ccb(
             
         local_frame_duration = interval_duration / (cycle + extra_time_in_frames)
         #ideal_vsyncs = np.arange(start_time, end_time, frame_duration)
-        if extra_time_in_frames > 0:
+        if abs(extra_time_in_frames) > 0:
             
             #find long frames and shift times accordingly
             frame_diffs = np.round(np.diff(these_vsyncs)/local_frame_duration)
@@ -682,7 +685,6 @@ def compute_frame_times_ccb(
             longest_ind = np.argmax(these_vdiffs)+1
             relative_vsyncs[longest_ind:] += extra_monitor_lag_in_frames*local_frame_duration
             
-        
         else:
             frame_diffs = np.ones(cycle-1)
             relative_vsyncs = np.insert(np.cumsum(frame_diffs*local_frame_duration), 0, 0)
@@ -692,7 +694,9 @@ def compute_frame_times_ccb(
     
     #Now deal with leftover frames that occur after the last diode transition
     #Just take the global frame duration for these
-    leftover_frames_first_ind = len(starts) - np.mod(len(starts), cycle)
+    num_leftover_frames = num_frames - (len(photodiode_times)-1)*60
+    leftover_frames_first_ind = len(starts)-num_leftover_frames #
+    #leftover_frames_first_ind = len(starts) - np.mod(len(starts), cycle)
     these_vsyncs = vsyncs[leftover_frames_first_ind:]
     frame_diffs = np.round(np.diff(these_vsyncs)/frame_duration)
     print('processing {} leftover frames after last diode transition'.format(len(these_vsyncs)))
@@ -701,6 +705,197 @@ def compute_frame_times_ccb(
     
     return starts
 
+def set_corrected_times(
+    corrected_frame_times,
+    vsync_slice,
+    start_time,
+    corrected_relevant_vsyncs
+):
+    """
+    This method copies the corrected_relevant_vsyncs
+    over to the corrected_frame_times
+    Parameters
+    ----------
+    corrected_frame_times : np.ndarray
+        The corrected frames
+    vsync_slice : Slice
+        The interval to insert the new frames
+    stim_start : float
+        The start time of the stimulus
+    corrected_relevant_vsyncs : np.ndarray
+        The full list of corrected frames
+    """
+
+    if vsync_slice.stop < len(corrected_frame_times):
+        corrected_frame_times[
+            vsync_slice
+        ] = start_time + corrected_relevant_vsyncs
+    else:
+        # TODO - is this correct? The lengths and shapes do not always line up
+
+        corrected_frame_times[
+            vsync_slice.start:
+            len(corrected_frame_times)
+        ] = start_time + corrected_relevant_vsyncs[
+            0:
+            len(corrected_frame_times) - vsync_slice.start
+        ]
+
+def compute_vbn_block_frame_times(
+    partitioned_vsync_times: np.ndarray,
+    partitioned_photodiode_times: np.ndarray,
+    expected_vsync_duration: float,
+    num_vsyncs_per_diode_toggle: int = 60
+) -> np.ndarray:
+    num_vsyncs = len(partitioned_vsync_times)
+    corrected_frame_times = np.zeros(num_vsyncs, dtype=float)
+    vsync_durations = np.diff(partitioned_vsync_times)
+
+    cycle = num_vsyncs_per_diode_toggle
+
+    pd_intervals = zip(
+        partitioned_photodiode_times[:-1],
+        partitioned_photodiode_times[1:]
+    )
+
+    for pd_interval_ind, (start_time, end_time) in enumerate(pd_intervals):
+
+        # Get duration of the current on->off/off->on photodiode interval
+        pd_interval_duration = end_time - start_time
+
+        # Get only vsync event times and vsync interval durations
+        # associated with current photodiode on/off interval
+        vsync_slice = slice(
+            pd_interval_ind * num_vsyncs_per_diode_toggle,
+            (pd_interval_ind + 1) * num_vsyncs_per_diode_toggle
+        )
+        relevant_vsyncs = partitioned_vsync_times[vsync_slice]
+        relevant_vsync_durations = vsync_durations[vsync_slice]
+
+        # Determine number of "long" vsyncs
+        # (vsyncs that are double the duration of normal vsyncs)
+        expected_pd_interval_duration = (
+            num_vsyncs_per_diode_toggle * expected_vsync_duration
+        )
+
+        excess_pd_interval_duration = (
+            np.sum(relevant_vsync_durations) - expected_pd_interval_duration
+        )
+
+        # We should only be long by multiples of vsync duration
+        num_long_vsyncs = int(
+            np.around(
+                excess_pd_interval_duration / expected_vsync_duration
+            )
+        )
+
+        # Determine total delay (sum of all sources of delay)
+        # in units of 'vsyncs'
+        # Total delay changes can only happen in whole 'vsyncs',
+        # never in fractions of 'vsyncs' (hence rounding)
+        total_delay = (
+            int(
+                np.around(
+                    (pd_interval_duration / expected_vsync_duration)
+                )
+            ) - num_vsyncs_per_diode_toggle
+        )
+
+        # If our total_delay is more than we would expect from just long vsyncs
+        # then extra frame to monitor delay occurred
+        extra_frame_to_monitor_delay = 0
+
+        if total_delay > num_long_vsyncs:
+            print(
+                """Extra delay between frame time
+                 and monitor display time detected"""
+            )
+
+            # Delay attributed to hardware/software factors that delay time
+            # to monitor display (in units of 'vsyncs') must then be:
+            extra_frame_to_monitor_delay = total_delay - num_long_vsyncs
+
+        # Number of actual frames/vsyncs that would fit
+        # in a photodiode switch interval
+        local_expected_vsync_duration = (
+            pd_interval_duration / (num_vsyncs_per_diode_toggle + total_delay)
+        )
+
+        if total_delay > 0:
+            # Correct for variability in vsync times
+            variance_reduced_frame_diffs = (
+                np.round(
+                    np.diff(relevant_vsyncs) / local_expected_vsync_duration
+                )
+            )
+
+            # NJM - Want first vsync to happen at diode transition
+            # NJM - Is the 0th vsync happening before or after first
+            # photodiode transition? There could be 1-off error (double check)
+            # Will need to check empirically when implementing
+            result = (
+                variance_reduced_frame_diffs * local_expected_vsync_duration
+            )
+
+            corrected_relevant_vsyncs = np.insert(
+                np.cumsum(result),
+                0,
+                0
+            )
+
+            # Then correct for extra_frame_to_monitor_delay if there was any
+            # Assume that if there was a change
+            # in monitor lag, it was after the long frame
+            longest_ind = np.argmax(relevant_vsync_durations) + 1
+            corrected_relevant_vsyncs[longest_ind:] += (
+                extra_frame_to_monitor_delay * local_expected_vsync_duration
+            )
+
+            set_corrected_times(
+                corrected_frame_times,
+                vsync_slice,
+                start_time,
+                corrected_relevant_vsyncs
+            )
+
+        else:
+
+            frame_diffs = np.ones(cycle-1)
+            corrected_relevant_vsyncs = np.insert(
+                np.cumsum(frame_diffs * local_expected_vsync_duration),
+                0,
+                0
+            )
+
+            set_corrected_times(
+                corrected_frame_times,
+                vsync_slice,
+                start_time,
+                corrected_relevant_vsyncs
+            )
+
+    # Now deal with leftover vsyncs that occur after the last diode transition
+    # Just take the global frame duration for these
+    leftover_vsyncs_start_ind = (
+        len(partitioned_vsync_times)
+        - np.mod(len(partitioned_vsync_times), num_vsyncs_per_diode_toggle)
+    )
+    relevant_vsyncs = partitioned_vsync_times[leftover_vsyncs_start_ind:]
+    frame_diffs = np.round(
+        np.diff(relevant_vsyncs) / expected_vsync_duration
+    )
+
+    corrected_relevant_vsyncs = np.insert(
+        np.cumsum(frame_diffs * expected_vsync_duration),
+        0,
+        0
+    )
+
+    corrected_frame_times[leftover_vsyncs_start_ind:] = (
+        partitioned_photodiode_times[-1] + corrected_relevant_vsyncs
+    )
+
+    return corrected_frame_times
 
 def trim_border_pulses(pd_times, vs_times, frame_interval=1/60, num_frames=3):
     pd_times = np.array(pd_times)

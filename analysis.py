@@ -186,7 +186,7 @@ def plot_raw_AP_band(datachunk, probeID, probe_info_dict, FIG_SAVE_DIR, skip_int
   
       
 def plot_AP_band_noise(probe_dirs, probes_to_run, probe_info_dicts, FIG_SAVE_DIR,
-                       data_chunk_size = 5, prefix=''):
+                       data_chunk_size = 5, skip_interval = 20, prefix=''):
     
     for pid in probes_to_run:
         
@@ -203,7 +203,7 @@ def plot_AP_band_noise(probe_dirs, probes_to_run, probe_info_dicts, FIG_SAVE_DIR
         
         save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + pid + ' AP band channel noise'))
         
-        plot_raw_AP_band(chunk, pid, probe_info_dicts[pid], FIG_SAVE_DIR, prefix=prefix)
+        plot_raw_AP_band(chunk, pid, probe_info_dicts[pid], FIG_SAVE_DIR, skip_interval = skip_interval, prefix=prefix)
     
 
 def probe_insertion_report(motor_locs_path, insertion_start_time, experiment_start_time,
@@ -447,32 +447,84 @@ def vectorize_edgetimes(on_times, off_times, sampleperiod = 0.001):
 def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
     
     monitor_lag = get_monitor_lag(syncDataset)
-    dioder, diodef = probeSync.get_diode_times(syncDataset)
-    vf = probeSync.get_vsyncs(syncDataset)
+#    dioder, diodef = probeSync.get_diode_times(syncDataset)
+#    vf = probeSync.get_vsyncs(syncDataset)
+#    
+#    start_session_diode_vector, dtimes = vectorize_edgetimes(dioder[:10], diodef[:10])
+#    
+#    fig, ax = plt.subplots(1, 2)
+#    fig.set_size_inches([15, 6])
+#    fig.suptitle('vsync/diode alignment')
+#    ax[0].plot(dtimes, start_session_diode_vector, 'k')
+#    ax[0].plot(vf[:500], 0.5*np.ones(500), 'r|', ms=20)
+#    ax[0].plot(vf[60], 0.5, 'g|', ms=30)
+#    ax[0].set_xlim([vf[0]-1, vf[60]+0.5])
+#    ax[0].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
+#    ax[0].set_xlabel('Experiment time (s)')
+#    
+#    ax[1].plot(dtimes, start_session_diode_vector, 'k')
+#    ax[1].plot(vf[50:70], 0.5*np.ones(20), 'r|', ms=20)
+#    ax[1].plot(vf[60], 0.5, 'g|', ms=30)
+#    ax[1].set_xlim([vf[50], vf[70]])
+#    ax[1].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
+#    ax[1].set_xlabel('Experiment time (s)')
+#    
+#    ax[1].legend(['diode', 'vf', 'frame 60', 'lag'], markerscale=0.5)
     
-    start_session_diode_vector, dtimes = vectorize_edgetimes(dioder[:10], diodef[:10])
-    
-    fig, ax = plt.subplots(1, 2)
-    fig.set_size_inches([15, 6])
-    fig.suptitle('vsync/diode alignment')
-    ax[0].plot(dtimes, start_session_diode_vector, 'k')
-    ax[0].plot(vf[:500], 0.5*np.ones(500), 'r|', ms=20)
-    ax[0].plot(vf[60], 0.5, 'g|', ms=30)
-    ax[0].set_xlim([vf[0]-1, vf[60]+0.5])
-    ax[0].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
-    ax[0].set_xlabel('Experiment time (s)')
-    
-    ax[1].plot(dtimes, start_session_diode_vector, 'k')
-    ax[1].plot(vf[50:70], 0.5*np.ones(20), 'r|', ms=20)
-    ax[1].plot(vf[60], 0.5, 'g|', ms=30)
-    ax[1].set_xlim([vf[50], vf[70]])
-    ax[1].plot([vf[60], vf[60]+monitor_lag], [0.75,0.75], 'b-')
-    ax[1].set_xlabel('Experiment time (s)')
-    
-    ax[1].legend(['diode', 'vf', 'frame 60', 'lag'], markerscale=0.5)
-
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.png'))
+    #save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.png'))
     #save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'vsync_with_diode.plotly.json'))
+    
+    sd = syncDataset
+    stim_ons, stim_offs = probeSync.get_stim_starts_ends(sd) # These are the on and off times for each stimulus (behavior, mapping, replay)
+    all_vsyncs = sd.get_falling_edges(2, units='seconds')
+    
+    # break the vsyncs up into three chunks (one for each stimulus)
+    vsyncs = []
+    diode_vsyncs = []
+    for son, soff in zip(stim_ons, stim_offs):
+        stim_vsyncs = all_vsyncs[(all_vsyncs>son)&(all_vsyncs<soff)]
+        stim_diode_vsyncs = stim_vsyncs[::60]
+        
+        vsyncs.append(stim_vsyncs)
+        diode_vsyncs.append(stim_diode_vsyncs)
+        
+        
+    #plot beginning of stims
+    fig, axes = plt.subplots(len(stim_ons))
+    if not isinstance(axes, list):
+        axes = [axes]
+    
+    fig.suptitle('Stim Starts')
+    for ind, (son, vs, dvs) in enumerate(zip(stim_ons, vsyncs, diode_vsyncs)):
+        print(ind)
+        axes[ind].plot(vs, 0.5*np.ones(len(vs)), '|')
+        axes[ind].plot(dvs, 0.5*np.ones(len(dvs)), '|', ms=20)    
+        
+        sd.plot_bit(4, son-1, son+2, axes=axes[ind])
+        sd.plot_bit(5, son-1, son+2, axes=axes[ind])
+        axes[ind].set_xlim([son-1, son+2])
+        axes[ind].legend(['vsyncs', 'diode_vsyncs', 'diode', 'stim_running'])
+        axes[ind].get_legend().remove()
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'stim_starts_vsync_with_diode.png'))
+        
+    #plot end of stims
+    fig, axes = plt.subplots(len(stim_offs))
+    if not isinstance(axes, list):
+        axes = [axes]
+        
+    fig.suptitle('Stim Ends')
+    for ind, (soff, vs, dvs) in enumerate(zip(stim_offs, vsyncs, diode_vsyncs)):
+        
+        axes[ind].plot(vs, 0.5*np.ones(len(vs)), '|')
+        axes[ind].plot(dvs, 0.5*np.ones(len(dvs)), '|', ms=20)
+        
+        sd.plot_bit(4, soff-2, soff+1, axes=axes[ind])
+        sd.plot_bit(5, soff-2, soff+1, axes=axes[ind])
+        axes[ind].set_xlim([soff-2, soff+1])
+        axes[ind].legend(['vsyncs', 'diode_vsyncs', 'diode', 'stim_running'])
+        axes[ind].get_legend().remove()
+
+    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'stim_ends_vsync_with_diode.png'))
 
 
 def get_monitor_lag(syncDataset):
@@ -588,7 +640,10 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     
     change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
     active_change_times = FRAME_APPEAR_TIMES[change_frames+behavior_start_frame]
-    passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
+    try:
+        passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
+    except:
+        passive_change_times = []
     
     lfig, lax = plt.subplots()
     preTime = 0.75
@@ -597,26 +652,31 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
         
         try:
             u_df = probe_dict[p]
-            good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+            #good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+            good_units = u_df[(u_df['snr']>1)&(u_df['isi_viol']<1)&(u_df['firing_rate']>0.1)]
+
         #    max_chan = good_units['peak_channel'].max()
         #    # take spikes from the top n channels as proxy for cortex
         #    spikes = good_units.loc[good_units['peak_channel']>max_chan-num_channels_to_take_from_top]['times']
-            ctx_bottom_chan = np.percentile(good_units['peak_channel'], ctx_units_percentile)
+            ctx_bottom_chan = np.percentile(good_units['peak_channel'], 100-ctx_units_percentile)
             spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]['times']
             sdfs = [[],[]]
             for s in spikes:
                 s = s.flatten()
                 if s.size>3600:
                     for icts, cts in enumerate([active_change_times, passive_change_times]): 
-                        sdf,t = analysis.plot_psth_change_flashes(cts, s, preTime=preTime, postTime=postTime)
-                        sdfs[icts].append(sdf)
+                        if len(cts)>0:
+                            sdf,t = analysis.plot_psth_change_flashes(cts, s, preTime=preTime, postTime=postTime)
+                            sdfs[icts].append(sdf)
          
             # plot population change response
             fig, ax = plt.subplots()
             title = p + ' population change response'
             fig.suptitle(title)
-            ax.plot(t, np.mean(sdfs[0], axis=0), 'k')
-            ax.plot(t, np.mean(sdfs[1], axis=0), 'g')
+            for sdf, color in zip(sdfs, ['k', 'g']):
+                if len(sdf)>0:
+                    ax.plot(t, np.mean(sdf, axis=0), color)
+                #ax.plot(t, np.mean(sdfs[1], axis=0), 'g')
             ax.legend(['active', 'passive'])
             ax.axvline(preTime, c='k')
             ax.axvline(preTime+0.25, c='k')

@@ -1938,6 +1938,13 @@ combined_df['omission_response_long_window'] = combined_df.apply(lambda row: omi
 good_unit_filter = ((combined_df['quality']=='good')&(combined_df['snr']>1)&(combined_df['isi_viol']<1)&(combined_df['firing_rate']>0.1))
 gtoh_filter = (combined_df['mouseID']!='548722')
 array_save_path = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\omission_responses_for_shinya"
+probe_area_dict = {'A': 'AM', 'B': 'PM', 'C': 'V1', 'D': 'LM', 'E': 'AL', 'F': 'RL'}
+
+# add area assignments to units
+probes = combined_df['probe']
+areas = [probe_area_dict[p] for p in probes]
+combined_df['area'] = areas
+
 for genotype in ('VIP', 'SST', 'RS', 'FS'):
     fig, ax = plt.subplots()
     fig.suptitle(genotype)
@@ -1948,7 +1955,13 @@ for genotype in ('VIP', 'SST', 'RS', 'FS'):
                                               (combined_df['image_set'].str.contains(image_set))]
         
         
-        o_response = np.stack(g_df['omission_response_long_window'])[:, 0, :]
+        #o_response = np.stack(g_df['omission_response_long_window'])[:, 0, :]
+        unit_positions = g_df['position']
+        areas = g_df['area']
+        np.save(os.path.join(array_save_path, genotype+image_set+'_positions.npy'), unit_positions)
+        np.save(os.path.join(array_save_path, genotype+image_set+'_areas.npy'), areas)
+        
+        
         np.save(os.path.join(array_save_path, genotype+image_set+'.npy'), o_response)
         
         time = np.stack(g_df['omission_response_long_window'])[0, 1, :] - 3

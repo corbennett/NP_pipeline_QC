@@ -27,10 +27,11 @@ def get_trials_df(behavior_data):
     return(trials)
 
 
-def plot_behavior(trials, save_dir, prefix=''):
+def plot_behavior(trials, save_dir=None, prefix=''):
     
     daily_behavior_fig = make_daily_figure(trials)
-    save_figure(daily_behavior_fig, os.path.join(save_dir, prefix+'behavior_summary.png'))
+    if save_dir:
+        save_figure(daily_behavior_fig, os.path.join(save_dir, prefix+'behavior_summary.png'))
     
     
 def get_trial_counts(trials):
@@ -44,7 +45,7 @@ def get_trial_counts(trials):
     return labels, trial_counts
 
 
-def plot_trial_type_pie(trial_counts, labels, save_dir, prefix=''):
+def plot_trial_type_pie(trial_counts, labels, save_dir=None, prefix=''):
     
     colors = ['g', '0.5', 'b', 'r', 'orange']
     fig, ax = plt.subplots()
@@ -64,7 +65,8 @@ def plot_trial_type_pie(trial_counts, labels, save_dir, prefix=''):
           loc="center left",
           bbox_to_anchor=(1, 0, 0.5, 1))
     
-    save_figure(fig, os.path.join(save_dir, prefix+'trial_type_piechart.png'))
+    if save_dir:
+        save_figure(fig, os.path.join(save_dir, prefix+'trial_type_piechart.png'))
 
 
 def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir=None, prefix=''):

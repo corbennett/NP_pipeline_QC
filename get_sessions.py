@@ -69,6 +69,9 @@ def mouseID_filter(d, mouseID):
     if mouseID[0]=='!':
         bad_mouse_list = mouseID.split('!')
         return str(d_mouseID) not in bad_mouse_list
+    elif mouseID[0]=='$':
+        good_mouse_list = mouseID.split('$')
+        return str(d_mouseID) in good_mouse_list
     else:    
         return str(d_mouseID) == str(mouseID)
     

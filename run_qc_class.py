@@ -30,12 +30,13 @@ from query_lims import query_lims
 class run_qc():
 
     def __init__(self, exp_id, save_root, modules_to_run='all', 
-                 cortical_sort=False, probes_to_run='ABCDEF'):
+                 cortical_sort=False, probes_to_run='ABCDEF', ctx_units_percentile=50):
 
         self.modules_to_run = modules_to_run
         self.errors = []
         self.cortical_sort = cortical_sort
         self.genotype = None
+        self.ctx_units_percentile = ctx_units_percentile
         
         self.data_stream_status = {'pkl' : [False, self._load_pkl_data],
                                    'opto': [False, self._load_opto_data],
@@ -398,13 +399,15 @@ class run_qc():
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def receptive_fields(self, save_rf_mat=False, ctx_units_percentile=40, stimulus_index=0):
+    def receptive_fields(self, save_rf_mat=False, stimulus_index=0):
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
         
         if self.cortical_sort:
             ctx_units_percentile = 100
+        else:
+            ctx_units_percentile = self.ctx_units_percentile
         #ctx_units_percentile = 40 if not self.cortical_sort else 100
         
         get_RFs(self.probe_dict, self.mapping_data, self.mapping_start_frame, self.FRAME_APPEAR_TIMES, 
@@ -417,7 +420,7 @@ class run_qc():
         if self.probe_dict is None:
             self._build_unit_table()
         analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, self.trials, 
-                                             self.FRAME_APPEAR_TIMES, os.path.join(self.FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=66, prefix=self.figure_prefix)
+                                             self.FRAME_APPEAR_TIMES, os.path.join(self.FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=self.ctx_units_percentile, prefix=self.figure_prefix)
 
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'LFP'])
@@ -586,7 +589,7 @@ class run_qc_passive(run_qc):
     
         
         base_dir = os.path.dirname(self.SYNC_FILE)
-        mapping_pkl = glob.glob(os.path.join(base_dir, '*stim*concat.pkl'))[0]
+        mapping_pkl = glob.glob(os.path.join(base_dir, '*stim.pkl'))[0]
         self.MAPPING_PKL = mapping_pkl
         print('Found mapping pkl: {}'.format(mapping_pkl))
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
@@ -608,6 +611,32 @@ class run_qc_passive(run_qc):
         self.data_stream_status['pkl'][0] = True
         
     
+    @_module_validation_decorator(data_streams=['sync'])
+    def videos(self, frames_for_each_epoch=[2,2,2]):
+        ### VIDEOS ###
+        video_dir = os.path.join(self.FIG_SAVE_DIR, 'videos')
+        
+        frame_times = self.FRAME_APPEAR_TIMES[::int(self.FRAME_APPEAR_TIMES.size/3)]
+        frame_times = np.append(frame_times, self.FRAME_APPEAR_TIMES[-1])
+        
+        analysis.lost_camera_frame_report(self.paths, video_dir, prefix=self.figure_prefix)
+        analysis.camera_frame_grabs(self.paths, self.syncDataset, video_dir, 
+                                    frame_times[:-1], frame_times[1:],
+                                    epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
+    
+    
+    @_module_validation_decorator(data_streams=['sync', 'pkl'])
+    def vsyncs(self):
+        ### Plot vsync info ###
+        vsync_save_dir = os.path.join(self.FIG_SAVE_DIR, 'vsyncs')
+#        analysis.plot_frame_intervals(self.vf, self.behavior_frame_count, self.mapping_frame_count, 
+#                                      self.behavior_start_frame, self.mapping_start_frame,
+#                                      self.replay_start_frame, vsync_save_dir, prefix=self.figure_prefix) 
+        analysis.plot_vsync_interval_histogram(self.vf, vsync_save_dir, prefix = self.figure_prefix)
+        #analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
+        analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
+    
+    
     def _run_modules(self):
         no_run_list = ['LFP', 'change_response', 'behavior']
         module_list = [func for func in dir(self) if callable(getattr(self, func))]
@@ -628,4 +657,5 @@ class run_qc_passive(run_qc):
                 except Exception as e:
                     print('Error running module {}'.format(module))
                     self.errors.append((module, e))
+
 

@@ -16,14 +16,15 @@ import probe_alignment_data_io as data_io
 
 
 #TODO: LOGGING!!! 
-mouseID = '564012'
+mouseID = '585326'
 ISI_pixels_per_micron = 0.44
 
 
 # Get D1 and D2 sessions for this mouse
 sources = [r"\\10.128.50.43\sd6.3", 
            r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2"]
+           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+           r"\\10.128.54.19\sd9"]
 
 sessions_to_run = gs.get_sessions(sources, mouseID=mouseID)
 if len(sessions_to_run) != 2:
@@ -142,6 +143,7 @@ for ip, p in enumerate('ABCDEF'):
 fig, ax = plt.subplots()
 for p in reticle_displacement:
     ax.plot([0, reticle_displacement[p][0]], [0, reticle_displacement[p][1]])
+    ax.text(reticle_displacement[p][0]+2, reticle_displacement[p][1]+2, p)
 ax.legend(['A', 'B', 'C', 'D', 'E', 'F'])
 ax.set_aspect('equal')
 

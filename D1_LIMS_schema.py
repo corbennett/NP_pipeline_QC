@@ -5,7 +5,8 @@ Created on Fri Sep  4 11:01:50 2020
 @author: svc_ccg
 """
 
-D1_schema = {'es_id': {'minimum_size': None},
+D1_schema = {
+ 'es_id': {'minimum_size': None},
  'es': {'minimum_size': None},
  'storage_directory': {'minimum_size': None},
  'workflow_state': {'minimum_size': None},
@@ -20,7 +21,6 @@ D1_schema = {'es_id': {'minimum_size': None},
  'behavior_dir': {'minimum_size': None},
  'EyeDlcOutputFile': {'minimum_size': 409683458.40000004},
  'EcephysPlatformFile': {'minimum_size': 5947.200000000001},
- 'StimulusPickle': {'minimum_size': 7339021.600000001},
  'EcephysRigSync': {'minimum_size': 74143171.2},
  'EcephysSurgeryNotes': {'minimum_size': 1314.4},
  'EcephysReplayStimulus': {'minimum_size': 27547471.200000003},
@@ -44,8 +44,8 @@ D1_schema = {'es_id': {'minimum_size': None},
  'EcephysProbeRawDataDEF': {'minimum_size': 378056264908.80005},
  'EcephysBrainSurfaceLeft': {'minimum_size': 1311537.6},
  'EcephysBrainSurfaceRight': {'minimum_size': 1316493.6},
- 'EcephysFiducialImage': {'minimum_size': 1606833.6},
- 'EcephysInsertionLocationImage': {'minimum_size': 983416.0},
+ 'EcephysFiducialImage': {'minimum_size': 1406833.6},
+ 'EcephysInsertionLocationImage': {'minimum_size': 900000.0},
  'EcephysOverlayImage': {'minimum_size': 542164.0},
  'EcephysPostExperimentLeft': {'minimum_size': 1308762.4000000001},
  'EcephysPostExperimentRight': {'minimum_size': 1321449.6},

@@ -13,8 +13,13 @@ import shutil
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", r"\\10.128.54.20\sd8"]
-sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200930')#, end_date='20200922')
+sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+           r"\\10.128.54.19\sd9"]
+#sessions_to_run = gs.get_sessions(sources, mouseID='!366122', start_date='20200930')#, end_date='20200922')
+
+#sessions_to_run = gs.get_sessions(sources, mouseID='530862')
+sessions_to_run = gs.get_sessions(sources, limsID='1090803859')
 destination = r"C:\Data\NP_pipeline_h5s"
 
 no_space = []
