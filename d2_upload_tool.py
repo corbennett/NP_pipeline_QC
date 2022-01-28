@@ -14,8 +14,12 @@ import json
 
 sources = [r"\\10.128.50.43\sd6.3", 
            r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3"
+           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+           r"\\10.128.54.19\sd9"
            ]
+exe_relative_path = r"c\Program Files\AIBS_MPE\createDay2\createDay2.exe"
+acq_to_sync_comp_dict = {'W10DT05501': r'\\W10DTSM18306',
+						 'W10DT05515': r'\\W10DTSM112719'}
 
 def start():
     #QtGui.QApplication.setGraphicsSystem("raster")
@@ -125,7 +129,8 @@ class D2_validation_tool():
 
 				self.limsID = self.sessionID.split('_')[0]
 				self.logOutput.append('\nset session to {}'.format(self.sessionID))
-				self.logOutput.append('found session directory {}'.format(self.session_directory))			
+				self.logOutput.append('found session directory {}'.format(self.session_directory))
+				self.sessionID = os.path.basename(self.session_directory)	
 				self.reset()
 			
 			except Exception as e:
@@ -248,6 +253,14 @@ class D2_validation_tool():
 
 	def initiate_d2_upload(self):
 		
+		if self.acq_computer_name.upper() in acq_to_sync_comp_dict:
+			exe_path = os.path.join(acq_to_sync_comp_dict[self.acq_computer_name.upper()], exe_relative_path)
+			self.logOutput.append('\nFound day2 upload script here: {}'.format(exe_path))
+		else:
+			self.logOutput.append('\nCould not find sync computer for acq computer {}'.format(self.acq_computer_name.upper()))
+			return
+
+
 		if self.lims_pass is None:
 			self.logOutput.append('\nPlease check lims for files before attempting upload')
 			return
@@ -257,6 +270,21 @@ class D2_validation_tool():
 			return
 
 		if not self.passed_d2_local_validation:
+			try:
+				initialUploadBoxReply = QMessageBox.question(self.mainWin, 'Initiate LIMS upload', 
+					'Session FAILED validation. Please confirm that you would like to OVERRIDE and upload session {} to LIMS'.format(self.sessionID), 
+					QMessageBox.Ok | QMessageBox.No)
+				if initialUploadBoxReply == QMessageBox.Ok:
+
+					#out = subprocess.check_call(r"C:\Program Files\AIBS_MPE\createDay2\createDay2.exe"+' --sessionid '+ self.limsID)
+					out = subprocess.check_call(exe_path +' --sessionid '+ self.limsID)
+					if out==0:
+						self.logOutput.append('\nLIMS upload successfully initated for session {}'.format(self.limsID))
+				else:
+					self.logOutput.append('\nAborting LIMS upload for session {}'.format(self.sessionID))
+			except Exception as e:
+				self.logOutput.append('\nCould not initiate d2 upload for session {}, due to error {}'
+					.format(self.limsID, e))	
 			self.logOutput.append('\nPlease validate local files before attempting upload')
 
 		else:
@@ -265,7 +293,8 @@ class D2_validation_tool():
 					'Please confirm that you would like to upload session {} to LIMS'.format(self.sessionID), 
 					QMessageBox.Ok | QMessageBox.No)
 				if initialUploadBoxReply == QMessageBox.Ok:
-					out = subprocess.check_call(r"C:\Program Files\AIBS_MPE\createDay2\createDay2.exe"+' --sessionid '+ self.limsID)
+					#out = subprocess.check_call(r"C:\Program Files\AIBS_MPE\createDay2\createDay2.exe"+' --sessionid '+ self.limsID)
+					out = subprocess.check_call(exe_path +' --sessionid '+ self.limsID)
 					if out==0:
 						self.logOutput.append('\nLIMS upload successfully initated for session {}'.format(self.limsID))
 				else:
