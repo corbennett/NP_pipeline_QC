@@ -62,6 +62,49 @@ D1_schema = {
 
 
 
+D1_translator = {
+ 
+ 'EcephysPlatformFile': '*platformD1.json',
+ 'EcephysRigSync': '*.sync',
+ 'EcephysSurgeryNotes': '*surgeryNotes.json',
+ 'EcephysReplayStimulus': '*replay.pkl',
+ 'OptoPickle': '*opto.pkl',
+ 'NewstepConfiguration': '*motor-locs.csv',
+ 'RawFaceTrackingVideo': '*face.mp4',
+ 'RawFaceTrackingVideoMetadata': '*face.json',
+ 'RawEyeTrackingVideo': '*eye.mp4',
+ 'RawEyeTrackingVideoMetadata': '*eye.json',
+ 'RawBehaviorTrackingVideo': '*behavior.mp4',
+ 'RawBehaviorTrackingVideoMetadata': '*behavior.json',
+ 'EcephysAreaClassifications': '*areaClassifications.csv',
+ 'mapping_pkl': '*mapping.pkl',
+ 'replay_pkl': '*replay.pkl',
+ 'behavior_pkl': '*behavior.pkl',
+ 'EcephysProbeRawDataABC': '*probeABC',
+ 'EcephysProbeRawDataDEF': '*probeDEF',
+ 'EcephysBrainSurfaceLeft': '*surface-image1-left.png',
+ 'EcephysBrainSurfaceRight': '*surface-image1-right.png',
+ 'EcephysFiducialImage': '*fiducial.png',
+ 'EcephysInsertionLocationImage': '*insertionLocation.png',
+ 'EcephysOverlayImage': '*overlay.png',
+ 'EcephysPostExperimentLeft': '*surface-image2-left.png',
+ 'EcephysPostExperimentRight': '*surface-image2-right.png',
+ 'EcephysPostInsertionLeft': '*surface-image3-left.png',
+ 'EcephysPostInsertionRight': '*surface-image3-right.png',
+ 'EcephysPostStimulusLeft': '*surface-image4-left.png',
+ 'EcephysPostStimulusRight': '*surface-image4-right.png',
+ 'EcephysPreExperimentLeft': '*surface-image5-left.png',
+ 'EcephysPreExperimentRight':'*surface-image5-right.png',
+ 'EcephysPreInsertionLeft': '*surface-image6-left.png',
+ 'EcephysPreInsertionRight': '*surface-image6-right.png',
+}
+
+
+
+
+
+
+
 
 #
 #schema = {k: {'minimum_size':None} for k in paths}

@@ -12,6 +12,7 @@ import pandas as pd
 
 logging.basicConfig(level=logging.WARNING)
 save_dir = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\sorted_data_validation_results"
+source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\source_list.json"
 
 def get_path(path_in):
     try:
@@ -503,15 +504,18 @@ class ecephys_files():
             missing_files_list = check_lims_files(self,computer_name,acq_drive,session_probe)
 """
 def get_network_dir(path):
-    vols_to_check = [
-                    r'\\10.128.50.20\sd7',
-                    r'\\10.128.50.20\sd7.2',
-                    r'\\10.128.54.20\sd8',
-                    r'\\10.128.54.20\sd8.2',
-                    r'\\10.128.54.20\sd8.3',
-                    r"\\10.128.54.19\sd9"
-                    ]
-
+    # vols_to_check = [
+    #                 r'\\10.128.50.43\sd6.3',
+    #                 r'\\10.128.50.20\sd7',
+    #                 r'\\10.128.50.20\sd7.2',
+    #                 r'\\10.128.54.20\sd8',
+    #                 r'\\10.128.54.20\sd8.2',
+    #                 r'\\10.128.54.20\sd8.3',
+    #                 r"\\10.128.54.19\sd9"
+    #                 ]
+    with open(source_volume_config, 'r') as f:
+        vols_to_check = json.load(f)
+        
     for vol in vols_to_check:
 
         dirs_in_vol = os.listdir(vol)
