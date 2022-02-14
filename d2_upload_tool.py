@@ -12,11 +12,15 @@ import subprocess
 from datetime import datetime
 import json
 
-sources = [r"\\10.128.50.43\sd6.3", 
-           r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
-           r"\\10.128.54.19\sd9"
-           ]
+# sources = [r"\\10.128.50.43\sd6.3", 
+#            r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+#            r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+#            r"\\10.128.54.19\sd9"
+#            ]
+source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\source_list.json"
+with open(source_volume_config, 'r') as f:
+    sources = json.load(f)
+    
 exe_relative_path = r"c\Program Files\AIBS_MPE\createDay2\createDay2.exe"
 acq_to_sync_comp_dict = {'W10DT05501': r'\\W10DTSM18306',
 						 'W10DT05515': r'\\W10DTSM112719'}

@@ -6,7 +6,7 @@ Created on Wed Aug 12 19:09:46 2020
 """
 
 import get_sessions as gs
-import os
+import os, json
 from run_qc_class import run_qc
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -14,9 +14,12 @@ import numpy as np
 
 #TODO: LOGGING!!! 
 
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
-           r"\\10.128.54.19\sd9"]
+#sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+#           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+#           r"\\10.128.54.19\sd9"]
+source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\source_list.json"
+with open(source_volume_config, 'r') as f:
+    sources = json.load(f)
 
 mice_to_skip = '!366122!544480!576325!576321!578002!578004!594585!594584!594534!593788!597503!597504!597507!597505!598431!597506'
 sessions_to_run = gs.get_sessions(sources, mouseID=mice_to_skip, start_date='20200601')#, end_date='20200930')

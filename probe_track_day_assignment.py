@@ -6,7 +6,7 @@ Created on Thu Jul 15 11:27:48 2021
 """
 import pandas as pd
 import numpy as np
-import os
+import os, json
 import get_sessions as gs
 from matplotlib import pyplot as plt
 import glob
@@ -19,12 +19,14 @@ import probe_alignment_data_io as data_io
 mouseID = '585326'
 ISI_pixels_per_micron = 0.44
 
-
+source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\source_list.json"
+with open(source_volume_config, 'r') as f:
+    sources = json.load(f)
 # Get D1 and D2 sessions for this mouse
-sources = [r"\\10.128.50.43\sd6.3", 
-           r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
-           r"\\10.128.54.19\sd9"]
+#sources = [r"\\10.128.50.43\sd6.3", 
+#           r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+#           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+#           r"\\10.128.54.19\sd9"]
 
 sessions_to_run = gs.get_sessions(sources, mouseID=mouseID)
 if len(sessions_to_run) != 2:

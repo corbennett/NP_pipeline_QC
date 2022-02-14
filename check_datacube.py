@@ -15,10 +15,13 @@ from lims_validation import run_validation
 from query_lims import query_lims
 
 #TODO: LOGGING!!! 
-
-sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
-           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
-           r"\\10.128.54.19\sd9"]
+source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\source_list.json"
+with open(source_volume_config, 'r') as f:
+    sources = json.load(f)
+    
+#sources = [r"\\10.128.50.43\sd6.3", r"\\10.128.50.20\sd7", r"\\10.128.50.20\sd7.2", 
+#           r"\\10.128.54.20\sd8", r"\\10.128.54.20\sd8.2", r"\\10.128.54.20\sd8.3",
+#           r"\\10.128.54.19\sd9"]
 
 #omit test mice and passive mice
 mice_to_skip = '!366122!544480!576325!576321!578002!578004!594585!594584!594534!593788!597503!597504!597507!597505!598431'
