@@ -15,9 +15,11 @@ df = pd.read_excel(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\al
 opt_data_dir = r'\\allen\programs\mindscope\workgroups\np-behavior\processed_ALL'
 
 def vis_mod(spikes, stim_times, monitor_lag=0.02):
-    
-    psth, _ = analysis.makePSTH_numba(spikes.flatten(), stim_times-0.5, 0.75)
-    vm = (np.mean(psth[500:]) - np.mean(psth[:500]))/(np.mean(psth[500:]) + np.mean(psth[:500]))
+    if isinstance(spikes, float):
+        vm = 0
+    else:
+        psth, _ = analysis.makePSTH_numba(spikes.flatten(), stim_times-0.5, 0.75)
+        vm = (np.mean(psth[500:]) - np.mean(psth[:500]))/(np.mean(psth[500:]) + np.mean(psth[:500]))
     
     return abs(vm)
     
@@ -28,7 +30,7 @@ h5_list = [os.path.join(h5_dir, h) for h in os.listdir(h5_dir)]
 
 overwrite = False
 failed = []
-for ir, dfrow in df.iterrows():
+for ir, dfrow in mdf.iterrows():#df.iloc[:100].iterrows():
     try:
         #check if we've already run this session
         mouseID = str(dfrow['mouse_id'])
@@ -45,7 +47,7 @@ for ir, dfrow in df.iterrows():
         
         #check if h5 file already exists for this session
         h5 = [h for h in h5_list if dfrow['full_id'] in h]
-        if len(h5)>0:
+        if len(h5)>0 and False:
             h5 = h5[0]
             print('loading: {}  number {} from h5'.format(h5, ir))
             ee2 = ebs.EcephysBehaviorSession.from_h5(h5)
@@ -73,7 +75,7 @@ for ir, dfrow in df.iterrows():
             unit_counts = np.ones(384)
             for uir, urow in unit_table.iterrows():
                 if (urow['quality']=='good') and (urow['probe']==probe) and (urow['firing_rate']>0.1):
-                    peak_channel = urow['peak_channel']
+                    peak_channel = int(urow['peak_channel'])
                     channel_vis_mod[peak_channel] += urow['vis_mod']
                     unit_counts[peak_channel] += 1
                 

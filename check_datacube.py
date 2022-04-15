@@ -142,8 +142,8 @@ for index, row in df.iterrows():
         error_string = error_string[:-2]
         df.at[index, 'LIMS Notes'] = 'D1: ' + error_string
     
-    df.at[index, 'D1'] = D1
-    df.at[index, 'D2'] = D2
+    df.at[index, 'D1_final'] = D1
+    df.at[index, 'D2_final'] = D2
     df.at[index, 'genotype'] = get_genotype(row['lims_id'])
 
     meta = get_session_meta(row['path'])

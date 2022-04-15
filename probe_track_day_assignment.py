@@ -38,16 +38,23 @@ source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\N
 with open(source_volume_config, 'r') as f:
     sources = json.load(f)
 
+mice_to_run = ['583430']#, '569154', '565581', '568158']
+
 ISI_pixels_per_micron = 0.44
 #failed_mice = []
 new_failed = []
+multiple_session_dirs = []
 for irow, row in annotation_df.iterrows():
     try:
         plt.close('all')
-        if row['animalID'] not in failed_mice or not row['Production List']:
+        #if row['animalID'] not in failed_mice or not row['Production List']:
+        if not row['Production List']:
             continue
         
         mouseID = str(row['animalID'])
+        
+        if not mouseID in mice_to_run:
+            continue
         
         print('generating images for mouse {}'.format(mouseID))
         sessions_to_run = gs.get_sessions(sources, mouseID=mouseID)
@@ -66,7 +73,9 @@ for irow, row in annotation_df.iterrows():
         
         # If there are more than 2 directories returned, figure out which ones are valid and take those
         new_sessions_to_run = []
+        
         if len(sessions_to_run)>2:
+            multiple_session_dirs.append(mouseID)
             unique_lims_ids = np.unique(session_limsids)
             if mouseID=='527294':
                 unique_lims_ids = unique_lims_ids[:2]
@@ -81,7 +90,7 @@ for irow, row in annotation_df.iterrows():
                 
                 new_sessions_to_run.append(session_to_use[0])
             sessions_to_run = new_sessions_to_run
-            
+        
         
         # GET ISI TARGET IMAGE FROM LIMS AND DISPLAY INSERTION ANNOTATIONS
         SPECIMEN_QRY = '''
@@ -154,10 +163,22 @@ for irow, row in annotation_df.iterrows():
             
             motor_locs_file = data_io.glob_file(s, '*motor-locs.csv')[0]
             motor_locs = data_io.read_motor_locs_into_dataframe(motor_locs_file)
-            motor_locs = motor_locs.loc[session_dates[ind]]
+            session_date = os.path.basename(motor_locs_file).split('_')[-1][:8]
+            motor_locs = motor_locs.loc[session_date]
+            
+            if mouseID in ['569156', '568158']: #weird motor assignments for two of the ultras
+                SN_probe_dict = {' SN34027': 'B',
+                                 ' SN31056': 'A',
+                                 ' SN32141': 'E',
+                                 ' SN32146': 'C',
+                                 ' SN32139': 'D',
+                                 ' SN32145': 'F'}
+            
+            else:
+                SN_probe_dict = data_io.map_newscale_SNs_to_probes(motor_locs)
             
             session_insertion_coords = data_io.find_tap_coordinates(motor_locs,
-                                                            data_io.map_newscale_SNs_to_probes(motor_locs),
+                                                            SN_probe_dict,
                                                             insertion_time_stamp)
         
             insertion_coords.append(session_insertion_coords)
@@ -186,13 +207,13 @@ for irow, row in annotation_df.iterrows():
                         arrows are inferred based on motor logs'.format(mouseID))
         fig.suptitle('D1/D2 insertion images for {}'.format(mouseID))
         
-        if np.isnan(row['OPT directory']):
+        if not isinstance(row['OPT directory'], str):
             raise ValueError('Could not find OPT directory for mouse {}'.format(mouseID))        
             
         save_dir = row['OPT directory']
             
         fig.savefig(os.path.join(save_dir, 'insertionImages.png'))
-        isifig.savefig(os.path.join(save_dir, 'estimatedInsertions.png'))
+        isifig.savefig(os.path.join(save_dir, 'estimatedInsertions_corrected.png'))
     except Exception as e:
         new_failed.append((row['animalID'], e))
         #failed_mice.append((row['animalID'], e))
