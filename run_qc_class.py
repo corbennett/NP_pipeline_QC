@@ -614,7 +614,7 @@ class run_qc_passive(run_qc):
     
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def receptive_fields(self, save_rf_mat=False, stimulus_index=0, mapping_start_frame=None):
+    def receptive_fields(self, save_rf_mat=False, stimulus_index=None, mapping_start_frame=None):
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
@@ -625,7 +625,10 @@ class run_qc_passive(run_qc):
             ctx_units_percentile = self.ctx_units_percentile
             
         if mapping_start_frame is None:
-            mapping_start_frame = self.mapping_start_frame
+            mapping_start_frame = int(self.mapping_start_frame)
+            
+        if stimulus_index is None:
+            stimulus_index = self.mapping_stim_index
         #ctx_units_percentile = 40 if not self.cortical_sort else 100
         
         get_RFs(self.probe_dict, self.mapping_data, mapping_start_frame, self.FRAME_APPEAR_TIMES, 
