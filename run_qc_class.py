@@ -595,6 +595,8 @@ class run_qc_passive(run_qc):
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
         self.mapping_stim_index = [istim for istim,stim in enumerate(self.mapping_data['stimuli']) if 'gabor' in stim['stim_path']]
         
+        print(self.mapping_stim_index)
+        
         if len(self.mapping_stim_index)==0:
             print('No mapping stim found in pkl file')
             return
@@ -605,11 +607,31 @@ class run_qc_passive(run_qc):
 
         self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
         
-
-        self.mapping_start_frame = 0
+        frame_rate = self.mapping_data.get('fps', 60)
+        self.mapping_start_frame = self.mapping_data['stimuli'][self.mapping_stim_index]['display_sequence'][0][0] * frame_rate
         
         self.data_stream_status['pkl'][0] = True
+    
+    
+    @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
+    def receptive_fields(self, save_rf_mat=False, stimulus_index=0, mapping_start_frame=None):
+        ### Plot receptive fields
+        if self.probe_dict is None:
+            self._build_unit_table()
         
+        if self.cortical_sort:
+            ctx_units_percentile = 100
+        else:
+            ctx_units_percentile = self.ctx_units_percentile
+            
+        if mapping_start_frame is None:
+            mapping_start_frame = self.mapping_start_frame
+        #ctx_units_percentile = 40 if not self.cortical_sort else 100
+        
+        get_RFs(self.probe_dict, self.mapping_data, mapping_start_frame, self.FRAME_APPEAR_TIMES, 
+                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, 
+                prefix=self.figure_prefix, save_rf_mat=save_rf_mat, stimulus_index=self.mapping_stim_index)
+
     
     @_module_validation_decorator(data_streams=['sync'])
     def videos(self, frames_for_each_epoch=[2,2,2]):

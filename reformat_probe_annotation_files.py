@@ -35,12 +35,19 @@ def get_depth5_grandparent(struct_id):
     return out
 
 #GET DATA FOR THIS MOUSE
+#mice_to_rerun = [533537, 541234, 544837, 578003, 579993, 554013, 570299, 570302, 574081, 506940, 521466, 546508, 553964, 562033]
+mice_to_rerun = [531237, 560962, 545994, 506940]
+just_use_cortical = {'531237': [1,2],
+                     '560962': [1,2],
+                     '545994': [1,2],
+                     '506940': [2]}
+
 failed = []
-for im, mouseID in enumerate(ctx_annotations['animalID'].unique()):
+for im, mouseID in enumerate(mice_to_rerun):# enumerate(ctx_annotations['animalID'].unique()):
     mouseID = str(int(mouseID))
     print('running {}, {} of {}'.format(mouseID, im, len(ctx_annotations['animalID'].unique())))
     try:
-        mouseID = '548717'
+        #mouseID = '562033'
         mouse_opt_dir = os.path.join(opt_dir, mouseID)
         final_ccf_coords_file = glob.glob(os.path.join(mouse_opt_dir, 'final_ccf_coordinates.csv'))[0]
         final_ccf_coords = pd.read_csv(final_ccf_coords_file)
@@ -54,6 +61,11 @@ for im, mouseID in enumerate(ctx_annotations['animalID'].unique()):
         exp_ids = df.loc[df['mouse_id']==float(mouseID)].sort_values(by='session_date')['full_id'].to_list()
         
         for probe in final_ccf_coords['probe'].unique():
+            
+            just_ctx = False
+            if mouseID in just_use_cortical:
+                if int(probe[-1]) in just_use_cortical[mouseID]:
+                    just_ctx=True
             
             #grab data for this probe, we'll have to save files for each probe individually
             probe_df = final_ccf_coords.loc[final_ccf_coords['probe']==probe]
@@ -129,7 +141,7 @@ for im, mouseID in enumerate(ctx_annotations['animalID'].unique()):
                     else:
                         layer = ''
                     
-                    if (probe_ctx_label == 'nonVIS') or ('RSPv' in structure_label):
+                    if (probe_ctx_label == 'nonVIS') or ('RSPv' in structure_label) or ('RSPd' in structure_label):
                         new_label = structure_label
                     else:
                         new_label = probe_ctx_label + layer
@@ -140,25 +152,30 @@ for im, mouseID in enumerate(ctx_annotations['animalID'].unique()):
                         ctx = 1
                     
                 else:
-                    new_label = structure_label
+                    new_label = structure_label 
+                    if just_ctx and not new_label=='root':
+                        new_label = 'grey'
                     ctx = -1
                 
                 probe_df_condensed.at[ir, 'structure_acronym'] = new_label
                 probe_df_condensed.at[ir, 'cortical_depth'] = ctx
-                #original_labels.append((probe, structure_label))
-                #new_labels.append((probe, new_label))
-            
+               
         
             #now adjust cortical depth column
             ctx_depth = np.zeros(384) - 1
             ctx_channels = np.where(probe_df_condensed['cortical_depth']==1)
-            ctx_depth[ctx_channels] = np.linspace(0, 1, len(ctx_channels[0]))
+            ctx_depth[ctx_channels] = np.linspace(1, 0, len(ctx_channels[0]))
             probe_df_condensed['cortical_depth'] = ctx_depth
             probe_df_condensed['is_valid'] = True
             probe_df_condensed.loc[191, 'is_valid'] = False
             
-            #also clean up white matter area assignments
-            
+            #delete non-cortical data from probes for which we have no track
+            if just_ctx:
+                print('erasing CCF data for {}, probe {}'.format(mouseID, probe))
+                probe_df_condensed['A/P'] = np.nan
+                probe_df_condensed['D/V'] = np.nan
+                probe_df_condensed['M/L'] = np.nan
+                probe_df_condensed['structure_id'] = np.nan
             
             probe_df_condensed = probe_df_condensed[final_columns]
             
@@ -169,8 +186,49 @@ for im, mouseID in enumerate(ctx_annotations['animalID'].unique()):
         print('failed to run mouse {}'.format(mouseID))
         failed.append((mouseID, e))
         
+
+
+##read in all these files and correct the cortical depth
+#csv_root = r'\\allen\programs\braintv\workgroups\neuralcoding\corbettb\VBN_production'
+#dirs = os.listdir(csv_root)
+#no_csv = []
+#for d in dirs:
+#    csv = glob.glob(os.path.join(csv_root, d, 'ccf_regions.csv'))
+#    if len(csv)>0:
+#        print(csv[0])
+#        p = pd.read_csv(csv[0])
+#        p.loc[p['cortical_depth']>=0, 'cortical_depth'] = 1 - p.loc[p['cortical_depth']>=0, 'cortical_depth']
+#        os.rename(csv[0], os.path.join(csv_root, d, 'ccf_regions_old_ctx_depth_rerun.csv'))
+#        p.to_csv(csv[0])
+#        
+#    else:
+#        no_csv.append(d)
         
         
         
+        
+        
+        
+        
+non_monotonic = []
+rsp = []
+big_ctx = []    
+for d in dirs:
+    csv = glob.glob(os.path.join(csv_root, d, 'ccf_regions.csv'))
+    if len(csv)>0:
+        
+        p = pd.read_csv(csv[0])
+        if any(p['D/V'].diff()>0):
+            non_monotonic.append(d)
+        
+        if any(p['structure_acronym'].dropna().str.contains('RSP')):
+            rsp.append(d)
+        
+        if np.sum(p['cortical_depth']>=0)>100:
+            big_ctx.append(d)
+        
+non_monotonic_mids = np.unique([s.split('_')[1] for s in non_monotonic])
+rsp_mids = np.unique([s.split('_')[1] for s in rsp])
+
         
         

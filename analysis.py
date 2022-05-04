@@ -779,7 +779,9 @@ def plot_unit_quality_hist(metrics_dict, FIG_SAVE_DIR, prefix=''):
     ax.legend(legend_artist, legend_label)
     ax.set_xlabel('Probe')
     ax.set_ylabel('Unit count')
-    
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
     save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'unit_quality_hist.png'))
     #fig.savefig(os.path.join(FIG_SAVE_DIR, 'unit_quality_hist.png'))
 
