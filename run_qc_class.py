@@ -686,7 +686,7 @@ class run_qc_passive(run_qc):
                     self.errors.append((module, e))
 
 
-class run_qc_DR_task1(run_qc):
+class DR1(run_qc):
     
     def _module_validation_decorator(data_streams):
         ''' Decorator to handle calling the module functions below and supplying

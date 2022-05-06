@@ -8,25 +8,36 @@ import os
 from run_qc_class import run_qc
 from run_qc_class import run_qc_hab
 from run_qc_class import run_qc_passive
+import run_qc_class
 import argparse
 
 #TODO: LOGGING!!! 
 
 def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
             destination=r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC",
-            modules_to_run='all', habituation=False, passive=False):
+            modules_to_run='all', habituation=False, passive=False, project=''):
 
     session_name = os.path.basename(session)
     print('\nRunning QC for session {} \n'
           .format(session_name))
     print('Saving to {}\n'.format(destination))
     
-    if habituation:
-        qc_class = run_qc_hab
-    elif passive:
-        qc_class = run_qc_passive
+    if project==''
+
+        if habituation:
+            qc_class = run_qc_hab
+        elif passive:
+            qc_class = run_qc_passive
+        else:
+            qc_class = run_qc
+
     else:
-        qc_class = run_qc
+        if hasattr(run_qc_class, project):
+            qc_class = run_qc_class.__getattribute__(project)
+        else:
+            print('No QC class corresponding to project {}'.format(project))
+            return
+
     
     r=qc_class(session, destination, probes_to_run=probes_to_run, 
         cortical_sort=cortical_sort, modules_to_run=modules_to_run)
@@ -78,6 +89,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-vc", "--passive", help="if tag included, run as a vc (passive) session",
                     action="store_true")
+
+    parser.add_argument("-proj", "--project", help='name of project for this experiment: DR1--DynamicRouting task1', default='')
     
     args = parser.parse_args()
     modules_to_run = parse_command_line_list(args.modules_to_run)
@@ -88,7 +101,7 @@ if __name__ == "__main__":
             destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
         modules_to_run = 'behavior'
 
-    call_qc(args.session, args.probes, args.cortical_sort, destination, modules_to_run, args.habituation, args.passive)
+    call_qc(args.session, args.probes, args.cortical_sort, destination, modules_to_run, args.habituation, args.passive, args.project)
         
     
     
