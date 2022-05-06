@@ -25,6 +25,7 @@ import data_getters
 from get_RFs_standalone import get_RFs
 import logging 
 from query_lims import query_lims
+from task1_behavior_session import DocData
 
 
 class run_qc():
@@ -419,7 +420,8 @@ class run_qc():
     def change_response(self):
         if self.probe_dict is None:
             self._build_unit_table()
-        analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, self.trials, 
+        change_frames = np.array(self.trials['change_frame'].dropna()).astype(int)+1
+        analysis.plot_population_change_response(self.probe_dict, self.behavior_start_frame, self.replay_start_frame, change_frames, 
                                              self.FRAME_APPEAR_TIMES, os.path.join(self.FIG_SAVE_DIR, 'change_response'), ctx_units_percentile=self.ctx_units_percentile, prefix=self.figure_prefix)
 
     
@@ -684,3 +686,99 @@ class run_qc_passive(run_qc):
                     self.errors.append((module, e))
 
 
+class run_qc_DR_task1(run_qc):
+    
+    def _module_validation_decorator(data_streams):
+        ''' Decorator to handle calling the module functions below and supplying
+            the right data streams. 
+            INPUT: 
+                data_streams: This should be a list of the data streams required
+                    by this module function. Options are (as of 10/30/2020):
+                        'pkl' : all the pkl files
+                        'sync': syncdataset
+                        'unit': kilosort data, builds unit table
+                        'LFP': LFP data, builds lfp table
+        '''
+        def decorator(module_func):
+            def wrapper(self):
+                for d in data_streams:
+                    if not self.data_stream_status[d][0]:
+                        self.data_stream_status[d][1]()
+                module_func(self)
+        
+            return wrapper
+        return decorator
+    
+    def _load_pkl_data(self):
+        if not self.data_stream_status['sync'][0]:
+            self._load_sync_data()
+    
+        self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
+        self.behavior_session = DocData(self.BEHAVIOR_PKL)
+        self.behavior_session.loadBehavData()
+        #self.trials = behavior_analysis.get_trials_df(self.behavior_data)
+
+        self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
+
+        ### CHECK FRAME COUNTS ###
+
+        self.behavior_frame_count = self.behavior_data['items']['behavior']['intervalsms'].size + 1
+        self.mapping_frame_count = self.mapping_data['intervalsms'].size + 1
+        self.replay_frame_count = 0 #self.replay_data['intervalsms'].size + 1
+        
+        self.total_pkl_frames = (self.behavior_frame_count +
+                            self.mapping_frame_count +
+                            self.replay_frame_count) 
+
+#        # look for potential frame offsets from aborted stims
+        (self.behavior_start_frame, self.mapping_start_frame) = probeSync.get_frame_offsets(self.syncDataset, 
+            [self.behavior_frame_count, self.mapping_frame_count])
+        
+        self.replay_start_frame = self.total_pkl_frames
+#
+        self.behavior_end_frame = self.behavior_start_frame + self.behavior_frame_count - 1
+ 
+        self.behavior_start_time = self.FRAME_APPEAR_TIMES[self.behavior_start_frame]
+        self.behavior_end_time = self.FRAME_APPEAR_TIMES[self.behavior_end_frame]
+        
+        self.data_stream_status['pkl'][0] = True
+        
+    
+    @_module_validation_decorator(data_streams=['sync'])
+    def videos(self, frames_for_each_epoch=[2,2,2]):
+        ### VIDEOS ###
+        video_dir = os.path.join(self.FIG_SAVE_DIR, 'videos')
+        
+        frame_times = self.FRAME_APPEAR_TIMES[::int(self.FRAME_APPEAR_TIMES.size/3)]
+        frame_times = np.append(frame_times, self.FRAME_APPEAR_TIMES[-1])
+        
+        analysis.lost_camera_frame_report(self.paths, video_dir, prefix=self.figure_prefix)
+        analysis.camera_frame_grabs(self.paths, self.syncDataset, video_dir, 
+                                    frame_times[:-1], frame_times[1:],
+                                    epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
+    
+    @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
+    def change_response(self):
+        if self.probe_dict is None:
+            self._build_unit_table()
+        
+        
+        save_dir = os.path.join(self.FIG_SAVE_DIR, 'change_response')
+        bs = self.behavior_session
+        block_change_frames = [bs.changeFrames[(bs.block==bl)] for bl in np.unique(bs.block)]
+        analysis.plot_change_response_DR(self.probe_dict, self.behavior_start_frame, 
+                                    block_change_frames, self.FRAME_APPEAR_TIMES,
+                                    save_dir, prefix=self.figure_prefix,                    
+                                    ctx_units_percentile=66)
+        
+        
+    @_module_validation_decorator(data_streams=['pkl', 'sync'])
+    def behavior(self):
+        ### Behavior Analysis ###
+        behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
+        self.behavior_session.plot_licks_from_change(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+        self.behavior_session.plotSummary(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+        self.behavior_session.trial_pie(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+        
+        pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
+        analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)

@@ -635,10 +635,10 @@ def evoked_rates(probe_dict, behavior_data, behavior_start_frame, FRAME_APPEAR_T
    
 
 def plot_population_change_response(probe_dict, behavior_start_frame, replay_start_frame, 
-                                    trials, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
+                                    change_frames, FRAME_APPEAR_TIMES, FIG_SAVE_DIR, ctx_units_percentile=66, prefix=''):
     
     
-    change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
+    #change_frames = np.array(trials['change_frame'].dropna()).astype(int)+1
     active_change_times = FRAME_APPEAR_TIMES[change_frames+behavior_start_frame]
     try:
         passive_change_times = FRAME_APPEAR_TIMES[change_frames+replay_start_frame]
@@ -703,9 +703,80 @@ def plot_population_change_response(probe_dict, behavior_start_frame, replay_sta
     lax.set_ylabel('Normalized response')
     save_figure(lfig, os.path.join(FIG_SAVE_DIR, prefix+'pop_change_response_latency_comparison.png'))
     #lfig.savefig(os.path.join(FIG_SAVE_DIR, 'pop_change_response_latency_comparison.png'))
+
+
+def plot_change_response_DR(probe_dict, behavior_start_frame, 
+                                    block_change_frames, FRAME_APPEAR_TIMES,
+                                    FIG_SAVE_DIR, prefix='',
+                                    ctx_units_percentile=66):
     
     
+    block_change_times = [np.array(bl)[~np.isnan(bl)].astype(int) for bl in block_change_frames]
+    block_change_times = [FRAME_APPEAR_TIMES[bl] for bl in block_change_times]
+    
+    lfig, lax = plt.subplots()
+    preTime = 0.75
+    postTime = 0.55
+    for p in probe_dict:
+        
+        #try:
+            u_df = probe_dict[p]
+            #good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
+            good_units = u_df[(u_df['snr']>1)&(u_df['isi_viol']<1)&(u_df['firing_rate']>0.1)]
+
+        #    max_chan = good_units['peak_channel'].max()
+        #    # take spikes from the top n channels as proxy for cortex
+        #    spikes = good_units.loc[good_units['peak_channel']>max_chan-num_channels_to_take_from_top]['times']
+            ctx_bottom_chan = np.percentile(good_units['peak_channel'], 100-ctx_units_percentile)
+            spikes = good_units.loc[good_units['peak_channel']>ctx_bottom_chan]['times']
+            sdfs = [[] for i in range(len(block_change_frames))]
+            for s in spikes:
+                s = s.flatten()
+                if s.size>3600:
+                    for icts, cts in enumerate(block_change_times): 
+                        if len(cts)>0:
+                            
+                            sdf,t = analysis.plot_psth_change_flashes(cts, s, preTime=preTime, postTime=postTime)
+                            sdfs[icts].append(sdf)
+         
+            # plot population change response
+            fig, ax = plt.subplots()
+            title = p + ' population change response'
+            colors = ['k', 'g', '0.5', 'r', 'b', 'orange', 'teal', 'm']
+            fig.suptitle(title)
+            for sdf, color in zip(sdfs, colors):
+                if len(sdf)>0:
+                    ax.plot(t, np.mean(sdf, axis=0), color)
+                #ax.plot(t, np.mean(sdfs[1], axis=0), 'g')
+            ax.legend(['block: '+str(b) for b in range(len(block_change_frames))])
+            ax.axvline(preTime, c='k')
+            ax.axvline(preTime+0.25, c='k')
+            ax.set_xticks(np.arange(0, preTime+postTime, 0.05))
+            ax.set_xticklabels(np.round(np.arange(-preTime, postTime, 0.05), decimals=2))
+            ax.set_xlabel('Time from change (s)')
+            ax.set_ylabel('Mean population response')
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix + title + '.png'))
+            #fig.savefig(os.path.join(FIG_SAVE_DIR, title + '.png'))
+            
+            mean_active = np.mean(sdfs[0], axis=0)
+            mean_active_baseline = mean_active[:int(preTime*1000)].mean()
+            baseline_subtracted = mean_active - mean_active_baseline
+            lax.plot(t, baseline_subtracted/baseline_subtracted.max(), c=probe_color_dict[p])
+        
+#        except Exception as e:
+#            print('Failed to run probe {} due to error {}'.format(p, e))
+        
+    lax.legend(probe_dict.keys())
+    lax.set_xlim([preTime, preTime+0.1])
+    lax.set_xticks(np.arange(preTime, preTime+0.1, 0.02))
+    lax.set_xticklabels(np.arange(0, 0.1, 0.02))
+    lax.set_xlabel('Time from change (s)')
+    lax.set_ylabel('Normalized response')
+    save_figure(lfig, os.path.join(FIG_SAVE_DIR, prefix+'pop_change_response_latency_comparison.png'))    
+
    
+    
+  
 def plot_running_wheel(pkl_list, FIG_SAVE_DIR, save_plotly=True, prefix=''):   
     '''
     INPUTS: pkl_list should be list of pkl data objects in the order in which

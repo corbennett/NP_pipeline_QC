@@ -115,7 +115,7 @@ H_NOT_NOVEL = [
 fig_save_dir = r"C:\Users\svc_ccg\Desktop\Presentations\SAC 2022"
 areas_of_interest = ['VISp', 'VISl', 'VISal', 'VISrl', 
                      'VISam', 'VISpm', 'LP', 'LGd', 'TH',
-                     'MRN', 'CA3']
+                     'MRN', 'CA3', 'SCig', 'SCiw']
 
 data_df = pd.DataFrame(data_dict)
 
@@ -150,7 +150,7 @@ for area in areas_of_interest:
         ax.plot(x, mean, color)
         ax.fill_between(x, mean+sem, mean-sem, color=color, alpha=0.25)
     
-    ax.set_xlim([-0.2, 0.5])    
+    #ax.set_xlim([-0.2, 0.5])    
     fig.savefig(os.path.join(fig_save_dir, area+'_change_response.pdf'))
     
     
