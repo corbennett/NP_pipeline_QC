@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 from matplotlib.backends.backend_pdf import PdfPages
+from analysis import save_figure
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
@@ -164,7 +165,7 @@ class DocData():
             plt.tight_layout()
             
             if save_dir is not None:
-                fig.savefig(os.path.join(save_dir, prefix+'_task1_trialmat.png'))
+                save_figure(fig, os.path.join(save_dir, prefix+'_task1_trialmat.png'))
 
 
     def trial_pie(self, save_dir=None, prefix=''):
@@ -199,7 +200,7 @@ class DocData():
         ax[2].set_title('Reward off')
         
         if save_dir is not None:
-            fig.savefig(os.path.join(save_dir, prefix+'_task1_trialtypes_pie.png'))
+            save_figure(fig, os.path.join(save_dir, prefix+'_task1_trialtypes_pie.png'))
         
         
         
@@ -240,7 +241,7 @@ class DocData():
         ax.set_ylabel('Trial Number')
         
         if save_dir is not None:
-            fig.savefig(os.path.join(save_dir, prefix+'_task1_lickRaster.png'))
+            save_figure(fig, os.path.join(save_dir, prefix+'_task1_lickRaster.png'))
 
 
 
