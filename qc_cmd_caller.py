@@ -22,7 +22,7 @@ def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
           .format(session_name))
     print('Saving to {}\n'.format(destination))
     
-    if project==''
+    if project=='':
         #LEGACY FLAGS, these should be replaced with projects at some point...
         if habituation:
             qc_class = run_qc_hab
