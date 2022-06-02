@@ -1,6 +1,6 @@
 from lims_validation import run_validation
 from copy_d2_lims_files_for_upload import transfer_session
-from validate_local_d2_files import run_session as validate_local_d2
+from validate_local_d2_files_ccb import validate_d2_files
 import get_sessions as gs
 import numpy as np
 from PyQt5 import QtCore, QtGui
@@ -208,7 +208,7 @@ class D2_validation_tool():
 		try:
 			self.get_acq_computername()
 			self.logOutput.append('validating local files for session {}'.format(self.sessionID))
-			self.passed_d2_local_validation = validate_local_d2(self.sessionID, self.acq_computer_name)
+			self.passed_d2_local_validation = validate_d2_files(self.sessionID, self.acq_computer_name)
 			if self.passed_d2_local_validation:
 				self.logOutput.append('Session {} passed local file validation (all files on E drive)'.format(self.sessionID))
 				self.validateLocalFilesButton.setStyleSheet("background-color: rgb(0, 200, 0)")
