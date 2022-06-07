@@ -595,7 +595,9 @@ class run_qc_passive(run_qc):
         self.MAPPING_PKL = mapping_pkl
         print('Found mapping pkl: {}'.format(mapping_pkl))
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
-        self.mapping_stim_index = [istim for istim,stim in enumerate(self.mapping_data['stimuli']) if 'gabor' in stim['stim_path']]
+        self.mapping_stim_index = [istim for istim,stim in enumerate(self.mapping_data['stimuli']) if \
+                                   ('gabor' in stim['stim_path']) or 
+                                   ('receptive_field' in stim['stim_path'])]
         
         print(self.mapping_stim_index)
         

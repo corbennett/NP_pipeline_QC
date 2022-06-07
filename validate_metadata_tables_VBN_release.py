@@ -26,7 +26,7 @@ TABLE = "Animals"
 
 df = pd.read_excel(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\all_np_behavior_mice.xlsx")
 
-b = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220527\behavior_sessions.csv")
+b = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220603\behavior_sessions.csv")
 
 mice =  b['mouse_id'].unique()
 
@@ -144,8 +144,8 @@ ref_3a = [36, 75, 112, 151, 188, 227, 264, 303, 340, 379]
 
 pj_dir = r'\\allen\programs\braintv\workgroups\neuralcoding\corbettb\VBN_production'
 
-channels = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220519\channels.csv")
-probes = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220519\probes.csv")
+channels = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220603\channels.csv")
+probes = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220603\probes.csv")
 cp = channels.merge(probes, left_on='ecephys_probe_id', right_on='ecephys_probe_id')
 
 channel_info = {s:{} for s in cp['ecephys_session_id_x'].unique()}
@@ -188,6 +188,19 @@ for sess_id in cp['ecephys_session_id_x'].unique():
 
 pj_num = np.array([sess[p]['pj_chan_num'] for skey, sess in channel_info.items() for p in sess])
 table_num = np.array([sess[p]['table_chan_num'] for skey, sess in channel_info.items() for p in sess])
+top_table_chan = np.array([sess[p]['top_table_chan'] for skey, sess in channel_info.items() for p in sess])
+
+many_too_few_channels = []
+slightly_too_few = []
+mask_3a = []
+for skey, sess in channel_info.items():
+    for pkey, p in sess.items():
+        if p['pj_chan_num']<372:
+            many_too_few_channels.append((skey, pkey, p['pj_chan_num']))
+        elif p['pj_chan_num']==372:
+            mask_3a.append((skey, pkey, p['pj_chan_num']))
+        elif 383>p['pj_chan_num']>372:
+            slightly_too_few.append((skey, pkey, p['pj_chan_num']))
 
 many_too_few_channels = []
 slightly_too_few = []
@@ -201,13 +214,10 @@ for skey, sess in channel_info.items():
         elif 383>p['pj_chan_num']>372:
             slightly_too_few.append((skey, pkey, p['pj_chan_num']))
         
-        
-        
-    
 ##########################
 ### SESSIONS #############
             
-sessions = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220527\ecephys_sessions.csv")
+ sessions = pd.read_csv(r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\metadata_220603\ecephys_sessions.csv")
 
 
 def novel_is_novel(sessions):
@@ -217,13 +227,18 @@ def novel_is_novel(sessions):
     rest = first_sessions.loc[~np.isin(first_sessions.mouse_id, H_first_G_mice)]
     
     rest_validation = (rest['prior_exposures_to_image_set']>0) & (rest['experience_level']=='Familiar')
+    H_G_validation =  (H_first_G['prior_exposures_to_image_set']==0) & (H_first_G['experience_level']=='Novel')
+    failed_sessions = list(rest.iloc[np.where(rest_validation.values==False)[0]]['ecephys_session_id'].values) +\
+        list(H_first_G.iloc[np.where(H_G_validation.values==False)[0]]['ecephys_session_id'].values)
+    return failed_sessions
     
     
-        and all(H_first_G['prior_exposures_to_image_set']==0) and all(H_first_G['experience_level']=='Novel')
-    return out
     
+def no_prior_is_novel(sessions):
     
-    
-    
+    no_prior_sessions = sessions.loc[sessions['prior_exposures_to_image_set']==0]
+    validation = no_prior_sessions['experience_level'] == 'Novel'
+    failed_sessions = list(no_prior_sessions.iloc[np.where(validation.values==False)[0]]['ecephys_session_id'].values)
+    return failed_sessions
     
 
