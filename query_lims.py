@@ -30,3 +30,11 @@ def query_lims(query_string):
     result = cursor.fetchall()
     
     return result
+
+
+
+DONOR_QRY = '''
+    SELECT *
+    FROM donors d
+    WHERE d.external_donor_name=cast({} as character varying)
+    '''

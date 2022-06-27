@@ -25,10 +25,11 @@ import argparse
 
 def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES, 
             FIG_SAVE_DIR, ctx_units_percentile = 40, return_rfs=False, 
-            response_thresh=20, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix='',
+            response_thresh=20, filter_on_significant=True, tile_rfs=True, chan_bin=9, max_rows=20, max_cols=20, prefix='',
             save_rf_mat=False, plot=True, stimulus_index=0): 
     
     ### PLOT POPULATION RF FOR EACH PROBE ###
+    print('Return rfs set to {}'.format(return_rfs))
     rfs = {p:{k:[] for k in ['peak_channel', 'unitID', 'rfmat']} for p in probe_dict}
     for p in probe_dict:
         try:
@@ -43,8 +44,10 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
             ctx_rmats = []
             for ind, s in spikes.iterrows():
                 rmat = analysis.plot_rf(mapping_data, s['times'].flatten(), first_frame_offset, FRAME_APPEAR_TIMES, stimulus_index=stimulus_index)
-                significant = get_significant_rf(rmat)
-                #if rmat.max()>response_thresh:
+                if filter_on_significant:
+                    significant = get_significant_rf(rmat)
+                else:
+                    significant = rmat.max()>response_thresh
                 if significant:
                     rfs[p]['peak_channel'].append(s['peak_channel'])
                     rfs[p]['unitID'].append(s['Unnamed: 0'])
@@ -109,8 +112,8 @@ def get_RFs(probe_dict, mapping_data, first_frame_offset, FRAME_APPEAR_TIMES,
                 
     if return_rfs:
         return rfs
-
-
+    
+    
 def plot_tiled_rfs(rfdict, FIG_SAVE_DIR, chan_bin = 8, max_rows=20, max_cols=20, prefix=''):
     
     for p in rfdict:
@@ -169,7 +172,7 @@ def get_significant_rf(rfmat, nreps=1000, conv=2):
     for rep in np.arange(nreps):
         flat = rf_shuff.flatten()
         np.random.shuffle(flat)
-        unflat = flat.reshape([9,9])
+        unflat = flat.reshape(rfmat.shape)
         unflat_conv = scipy.signal.convolve2d(unflat, conv_mat, 'same')/4
         shuffled.append(unflat_conv)
     

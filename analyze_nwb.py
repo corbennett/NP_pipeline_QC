@@ -31,7 +31,7 @@ def makePSTH_numba(spikes, startTimes, windowDur, binSize=0.001, convolution_ker
     counts = np.convolve(counts, convkernel)/(binSize*convkernel.size)
     return counts[convkernel.size-1:-convkernel.size], bins[:-convkernel.size-1]
 
-nwb_base = r'\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\nwbs_220527'
+nwb_base = r'\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\vbn_s3_cache\visual-behavior-neuropixels-0.1.0\ecephys_sessions'
 nwb_paths = glob.glob(os.path.join(nwb_base, '*nwb'))
 nwb_validation_dir = r"\\allen\programs\mindscope\workgroups\np-exp\VBN_NWB_validation"
 
@@ -160,7 +160,7 @@ data_dict = {
         'flash_response':[]}
 
 ash_dict = {}
-for inwb, nwb_path in enumerate(nwb_paths[132:]):
+for inwb, nwb_path in enumerate(nwb_paths):
     with NWBHDF5IO(nwb_path, 'r', load_namespaces=True) as nwb_io:
         session = BehaviorEcephysSession.from_nwb(nwbfile=nwb_io.read())
     
@@ -212,7 +212,7 @@ for inwb, nwb_path in enumerate(nwb_paths[132:]):
 
     for iu, unit in unitchannels.iterrows():
         
-        area = unit.manual_structure_acronym
+        area = unit.structure_acronym
         if 'VIS' in area:
             
             sts = spike_times[iu]
@@ -417,166 +417,166 @@ for sessionID in data_df.session.unique():
 
 
 
-### SEIZURE DETECTION ###
+# ### SEIZURE DETECTION ###
         
-df = pd.read_excel(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\VBN_release_shared.xlsx")
-manual_seizure = df.loc[[s in [True, '?', 'minor', 'minor?', 'TRUE?'] for s in df.Seizure]]['full_id']
-manual_seizure_sessions = [int(s[:10]) for s in manual_seizure.values]
-opt_sessions = df.loc[[s not in [False, np.nan] for s in df.Seizure]]['full_id']
+# df = pd.read_excel(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\VBN_release_shared.xlsx")
+# manual_seizure = df.loc[[s in [True, '?', 'minor', 'minor?', 'TRUE?'] for s in df.Seizure]]['full_id']
+# manual_seizure_sessions = [int(s[:10]) for s in manual_seizure.values]
+# opt_sessions = df.loc[[s not in [False, np.nan] for s in df.Seizure]]['full_id']
 
-seizure_dict = {}
-zscored = {}
-for sid in ash_dict:
-    print(sid)
-    ss = ash_dict[sid]
-    seizure_dict[sid] = []
-    zscored[sid] = {}
-    for probeid in ss:
+# seizure_dict = {}
+# zscored = {}
+# for sid in ash_dict:
+#     print(sid)
+#     ss = ash_dict[sid]
+#     seizure_dict[sid] = []
+#     zscored[sid] = {}
+#     for probeid in ss:
     
-        p = ss[probeid]
+#         p = ss[probeid]
         
-        detrended = p - scipy.signal.medfilt(p, 1001)
-        detrended_zscore = (detrended - np.mean(detrended))/np.std(detrended)
-        zscored[sid][probeid] = detrended_zscore
+#         detrended = p - scipy.signal.medfilt(p, 1001)
+#         detrended_zscore = (detrended - np.mean(detrended))/np.std(detrended)
+#         zscored[sid][probeid] = detrended_zscore
         
-        candidates = np.where(detrended > np.mean(detrended) + 5*np.std(detrended)) #was 5
-        if len(candidates)>0:
-            candidates = candidates[0]
-            seizures = []
-            for c in candidates:
-                baseline = detrended[c-110:c-10]
-                after = detrended[c+5:c+50]
-                if np.mean(after) < np.mean(baseline) - 2*np.std(baseline):
-                    if not 8800<c< 8850: #Don't take seizures that are right at the beginning of opto TODO: find opto start times for each session
-                        seizures.append(c)
-                #seizures.append(c)
-        seizure_dict[sid].append(seizures)
+#         candidates = np.where(detrended > np.mean(detrended) + 5*np.std(detrended)) #was 5
+#         if len(candidates)>0:
+#             candidates = candidates[0]
+#             seizures = []
+#             for c in candidates:
+#                 baseline = detrended[c-110:c-10]
+#                 after = detrended[c+5:c+50]
+#                 if np.mean(after) < np.mean(baseline) - 2*np.std(baseline):
+#                     if not 8800<c< 8850: #Don't take seizures that are right at the beginning of opto TODO: find opto start times for each session
+#                         seizures.append(c)
+#                 #seizures.append(c)
+#         seizure_dict[sid].append(seizures)
 
-interictal = 60
-seizure_time_dict = {}
-for s in seizure_dict:
-    ss = seizure_dict[s]
-    st = []
-    seizure_times = np.sort(np.array([item for sublist in ss for item in sublist]))
-    if len(seizure_times) > 0:
-        st = seizure_times[np.insert(np.diff(seizure_times)>interictal, 0, True)]
+# interictal = 60
+# seizure_time_dict = {}
+# for s in seizure_dict:
+#     ss = seizure_dict[s]
+#     st = []
+#     seizure_times = np.sort(np.array([item for sublist in ss for item in sublist]))
+#     if len(seizure_times) > 0:
+#         st = seizure_times[np.insert(np.diff(seizure_times)>interictal, 0, True)]
 
-    seizure_time_dict[s] = st
+#     seizure_time_dict[s] = st
 
 
 
-flatten = lambda x: [item for sub in x for item in sub]
-spike_dip_seizure_sessions = [s for s in seizure_dict if len(flatten(seizure_dict[s]))>0]
-spike_seizure_sessions = [s for s in zscored if np.max(flatten([zscored[s][pid] for pid in zscored[s]]))>10]
-diff = np.setdiff1d(spike_seizure_sessions, spike_dip_seizure_sessions)
+# flatten = lambda x: [item for sub in x for item in sub]
+# spike_dip_seizure_sessions = [s for s in seizure_dict if len(flatten(seizure_dict[s]))>0]
+# spike_seizure_sessions = [s for s in zscored if np.max(flatten([zscored[s][pid] for pid in zscored[s]]))>10]
+# diff = np.setdiff1d(spike_seizure_sessions, spike_dip_seizure_sessions)
 
-for criterion, savedir in zip([spike_dip_seizure_sessions, diff], ['std_5_spike_std_2_dip', 'std_10_spike']):
-    for s in criterion:
-        ss = seizure_dict[s]
+# for criterion, savedir in zip([spike_dip_seizure_sessions, diff], ['std_5_spike_std_2_dip', 'std_10_spike']):
+#     for s in criterion:
+#         ss = seizure_dict[s]
         
-        #seizure_times = [item for sublist in ss for item in sublist]
-        seizure_times = seizure_time_dict[s]
-        fig, ax = plt.subplots(6)
-        fig.suptitle(s)
-        for ip, p in enumerate(ash_dict[s]):
-            if 'dip' in savedir:
-                for st in seizure_times:
-                    ax[ip].axvline(st, c='r', alpha=0.5)
-            else:
-                sts = np.where(zscored[s][p]>10)[0]
-                for st in sts:
-                    ax[ip].axvline(st, c='r', alpha=0.5)
-            ax[ip].plot(ash_dict[s][p])
+#         #seizure_times = [item for sublist in ss for item in sublist]
+#         seizure_times = seizure_time_dict[s]
+#         fig, ax = plt.subplots(6)
+#         fig.suptitle(s)
+#         for ip, p in enumerate(ash_dict[s]):
+#             if 'dip' in savedir:
+#                 for st in seizure_times:
+#                     ax[ip].axvline(st, c='r', alpha=0.5)
+#             else:
+#                 sts = np.where(zscored[s][p]>10)[0]
+#                 for st in sts:
+#                     ax[ip].axvline(st, c='r', alpha=0.5)
+#             ax[ip].plot(ash_dict[s][p])
         
-        fig.set_size_inches([14,8])
-        fig.savefig(os.path.join(nwb_validation_dir, 'seizures', savedir, str(s)+'.png'))
+#         fig.set_size_inches([14,8])
+#         fig.savefig(os.path.join(nwb_validation_dir, 'seizures', savedir, str(s)+'.png'))
         
-    plt.close('all')
+#     plt.close('all')
 
-weird_visual_sessions = [1062755779, 1067790400, 1077897245, 1079275221, 1084428217, 1084939136]
-for s in spike_dip_seizure_sessions:
-#for s in manual_in_release:
-    #if s not in spike_dip_seizure_sessions:
-        ss = seizure_dict[s]
+# weird_visual_sessions = [1062755779, 1067790400, 1077897245, 1079275221, 1084428217, 1084939136]
+# for s in spike_dip_seizure_sessions:
+# #for s in manual_in_release:
+#     #if s not in spike_dip_seizure_sessions:
+#         ss = seizure_dict[s]
         
-        seizure_times = [item for sublist in ss for item in sublist]
-        fig, ax = plt.subplots(6)
-        fig.suptitle(s)
-        for ip, p in enumerate(ash_dict[s]):
-            if 'dip' in savedir:
-                for st in seizure_times:
-                    ax[ip].axvline(st, c='r', alpha=0.5)
-            else:
-                sts = np.where(zscored[s][p]>10)[0]
-                for st in sts:
-                    ax[ip].axvline(st, c='r', alpha=0.5)
-            ax[ip].plot(ash_dict[s][p])
+#         seizure_times = [item for sublist in ss for item in sublist]
+#         fig, ax = plt.subplots(6)
+#         fig.suptitle(s)
+#         for ip, p in enumerate(ash_dict[s]):
+#             if 'dip' in savedir:
+#                 for st in seizure_times:
+#                     ax[ip].axvline(st, c='r', alpha=0.5)
+#             else:
+#                 sts = np.where(zscored[s][p]>10)[0]
+#                 for st in sts:
+#                     ax[ip].axvline(st, c='r', alpha=0.5)
+#             ax[ip].plot(ash_dict[s][p])
         
-        fig.set_size_inches([14,8])
-        fig.savefig(os.path.join(nwb_validation_dir, 'seizures', 'manual_annotation', str(s)+'.png'))
+#         fig.set_size_inches([14,8])
+#         fig.savefig(os.path.join(nwb_validation_dir, 'seizures', 'manual_annotation', str(s)+'.png'))
 
 
 
-#for s in seizure_dict:
-for s in diff:
-    ss = seizure_dict[s]
-    seizure_times = [item for sublist in ss for item in sublist]
-    num_seizures = len(seizure_times)
-    if num_seizures>0:
-        print(s)
-        fig, ax = plt.subplots(6)
-        fig.suptitle(s)
-        for ip, p in enumerate(ash_dict[s]):
-            for st in seizure_times:
-                ax[ip].axvline(st, c='r', alpha=0.5)
-            ax[ip].plot(ash_dict[s][p])
+# #for s in seizure_dict:
+# for s in diff:
+#     ss = seizure_dict[s]
+#     seizure_times = [item for sublist in ss for item in sublist]
+#     num_seizures = len(seizure_times)
+#     if num_seizures>0:
+#         print(s)
+#         fig, ax = plt.subplots(6)
+#         fig.suptitle(s)
+#         for ip, p in enumerate(ash_dict[s]):
+#             for st in seizure_times:
+#                 ax[ip].axvline(st, c='r', alpha=0.5)
+#             ax[ip].plot(ash_dict[s][p])
             
 
-test_zs = np.arange(1, 20, 0.5)
-seizure_count = np.zeros(len(test_zs))
-rand_count = np.zeros(len(test_zs))
+# test_zs = np.arange(1, 20, 0.5)
+# seizure_count = np.zeros(len(test_zs))
+# rand_count = np.zeros(len(test_zs))
 
-rand = [[np.random.poisson(1650, 9000) for i in range(6)] for j in range(149)]
-rand_zscored = [[(rr-np.mean(rr))/np.std(rr) for rr in r] for r in rand]
+# rand = [[np.random.poisson(1650, 9000) for i in range(6)] for j in range(149)]
+# rand_zscored = [[(rr-np.mean(rr))/np.std(rr) for rr in r] for r in rand]
 
-for iz, z in enumerate(test_zs):
+# for iz, z in enumerate(test_zs):
     
-    for ind, s in enumerate(zscored):
-        seiz = 0
-        rseiz = 0
-        zs = zscored[s]
-        rzs = rand_zscored[ind]
-        for pind, p in enumerate(zs):
-            if any(zs[p]>z):
-                seiz = 1
-            if any(rzs[pind]>z):
-                rseiz = 1
+#     for ind, s in enumerate(zscored):
+#         seiz = 0
+#         rseiz = 0
+#         zs = zscored[s]
+#         rzs = rand_zscored[ind]
+#         for pind, p in enumerate(zs):
+#             if any(zs[p]>z):
+#                 seiz = 1
+#             if any(rzs[pind]>z):
+#                 rseiz = 1
         
-        seizure_count[iz] += seiz
-        rand_count[iz] += rseiz
+#         seizure_count[iz] += seiz
+#         rand_count[iz] += rseiz
         
-plt.plot(test_zs,seizure_count)
-plt.plot(test_zs,rand_count)
+# plt.plot(test_zs,seizure_count)
+# plt.plot(test_zs,rand_count)
 
-for ind, s in enumerate(zscored):
-    seiz = 0
-    zs = zscored[s]
-    for pind, p in enumerate(zs):
-        if any(zs[p]>15):
-            seiz = 1
+# for ind, s in enumerate(zscored):
+#     seiz = 0
+#     zs = zscored[s]
+#     for pind, p in enumerate(zs):
+#         if any(zs[p]>15):
+#             seiz = 1
     
-    if seiz==1:
-        fig, ax = plt.subplots()
-        [ax.plot(zs[p]) for p in zs]
+#     if seiz==1:
+#         fig, ax = plt.subplots()
+#         [ax.plot(zs[p]) for p in zs]
     
-df['Abnormal Activity']= None
+# df['Abnormal Activity']= None
 
-for s in spike_dip_seizure_sessions:
-    df.loc[df.full_id.str.contains(str(s)),'Abnormal Activity']=[list(seizure_time_dict[s])]
+# for s in spike_dip_seizure_sessions:
+#     df.loc[df.full_id.str.contains(str(s)),'Abnormal Activity']=[list(seizure_time_dict[s])]
      
-writer = pd.ExcelWriter(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\VBN_seizure_flag.xlsx", engine='xlsxwriter')
-df.to_excel(writer, sheet_name='Sheet1', index=False)
-writer.save()  
+# writer = pd.ExcelWriter(r"C:\Users\svc_ccg\ccb_onedrive\OneDrive - Allen Institute\VBN_seizure_flag.xlsx", engine='xlsxwriter')
+# df.to_excel(writer, sheet_name='Sheet1', index=False)
+# writer.save()  
     
     
     

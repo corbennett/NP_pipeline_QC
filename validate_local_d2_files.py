@@ -568,6 +568,8 @@ def run_session(sessionID, acq_computer_name):
             failures = json.load(f)
         if failures:
             failed_probes.append(probe)
+        else:
+            
     if failed_probes == []:
         print(sessionID + ' Passed!!')
         return True

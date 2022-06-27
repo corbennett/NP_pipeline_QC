@@ -923,10 +923,10 @@ def all_spike_hist(probe_data):
     return hist, bin_e
     
 
-def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
+def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, return_hist = False, prefix=''):
     
     flatten = lambda l: [item[0] for sublist in l for item in sublist]
-
+    ash = {}
     for p in probe_dict:
         u_df = probe_dict[p]
         good_units = u_df[(u_df['quality']=='good')&(u_df['snr']>1)]
@@ -935,14 +935,18 @@ def plot_all_spike_hist(probe_dict, FIG_SAVE_DIR, prefix=''):
         binwidth = 1
         bins = np.arange(0, np.max(spikes), binwidth)
         hist, bin_e = np.histogram(spikes, bins)
+        ash[p] = hist
+        if FIG_SAVE_DIR is not None:
+            fig, ax = plt.subplots()
+            fig.suptitle('spike histogram (good units), Probe ' + p)
+            ax.plot(bin_e[1:-1], hist[1:])
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Spike Count per ' + str(binwidth) + ' second bin')
+            save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram'))
+            save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram.plotly.json'))
+    if return_hist:
+        return ash
         
-        fig, ax = plt.subplots()
-        fig.suptitle('spike histogram (good units), Probe ' + p)
-        ax.plot(bin_e[1:-1], hist[1:])
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Spike Count per ' + str(binwidth) + ' second bin')
-        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram'))
-        save_as_plotly_json(fig, os.path.join(FIG_SAVE_DIR, prefix+'Probe' + p + ' spike histogram.plotly.json'))
 #    for ip, probe in enumerate(probe_dirs):
 #        p_name = probe.split('_')[-2][-1]
 #        base = os.path.join(os.path.join(probe, 'continuous'), 'Neuropix-PXI-100.0')

@@ -373,14 +373,17 @@ class run_qc():
         analysis.probe_yield_report(self.metrics_dict, self.probeinfo_dict, probe_yield_dir, prefix=self.figure_prefix)    
 
     @_module_validation_decorator(data_streams=['sync', 'unit'])
-    def data_loss(self):
+    def data_loss(self, return_hist=False):
 
         probe_yield_dir = os.path.join(self.FIG_SAVE_DIR, 'probe_yield')
         if not os.path.exists(probe_yield_dir):
             os.mkdir(probe_yield_dir)
 
         ### Look for gaps in data acquisition ###
-        analysis.plot_all_spike_hist(self.probe_dict, probe_yield_dir, prefix=r'all_spike_hist\\' + self.figure_prefix+'good')
+        all_spike_hist = analysis.plot_all_spike_hist(self.probe_dict, probe_yield_dir, 
+                                                      prefix=r'all_spike_hist\\' + self.figure_prefix+'good',
+                                                      return_hist=return_hist)
+        self.all_spike_hists = all_spike_hist
 
 
     def unit_metrics(self):
@@ -618,7 +621,7 @@ class run_qc_passive(run_qc):
     
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
-    def receptive_fields(self, save_rf_mat=False, stimulus_index=None, mapping_start_frame=None):
+    def receptive_fields(self, save_rf_mat=False, stimulus_index=None, mapping_start_frame=None, return_rfs=False):
         ### Plot receptive fields
         if self.probe_dict is None:
             self._build_unit_table()
@@ -635,10 +638,12 @@ class run_qc_passive(run_qc):
             stimulus_index = self.mapping_stim_index
         #ctx_units_percentile = 40 if not self.cortical_sort else 100
         
-        get_RFs(self.probe_dict, self.mapping_data, mapping_start_frame, self.FRAME_APPEAR_TIMES, 
-                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), ctx_units_percentile=ctx_units_percentile, 
+        rfs = get_RFs(self.probe_dict, self.mapping_data, mapping_start_frame, self.FRAME_APPEAR_TIMES, 
+                os.path.join(self.FIG_SAVE_DIR, 'receptive_fields'), return_rfs = return_rfs, ctx_units_percentile=ctx_units_percentile, 
                 prefix=self.figure_prefix, save_rf_mat=save_rf_mat, stimulus_index=self.mapping_stim_index)
-
+        
+        self.rf_mats = rfs
+        
     
     @_module_validation_decorator(data_streams=['sync'])
     def videos(self, frames_for_each_epoch=[2,2,2]):
