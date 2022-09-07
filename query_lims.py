@@ -38,3 +38,21 @@ DONOR_QRY = '''
     FROM donors d
     WHERE d.external_donor_name=cast({} as character varying)
     '''
+    
+BEHAVIOR_SESSION_QRY = '''
+    SELECT *
+    FROM behavior_sessions bs
+    WHERE bs.id={}
+    '''
+    
+PROJECT_QRY = '''
+    SELECT *
+    FROM projects p
+    WHERE p.id={}
+    '''
+
+ECEPHYS_SESSION_QRY = '''
+    SELECT *
+    FROM ecephys_sessions es
+    WHERE es.id = {}
+    '''

@@ -1043,7 +1043,9 @@ def plot_barcode_intervals(probe_dirs, syncDataset, FIG_SAVE_DIR, prefix=''):
     pax[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     pax[0].legend([probe.split('_')[-2][-1] for probe in probe_dirs])
     
-    save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'barcode_intervals.png'))
+    if FIG_SAVE_DIR:
+    
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'barcode_intervals.png'))
     #save_figure(pfig, os.path.join(FIG_SAVE_DIR, prefix+'Probe_barcode_intervals.png'))
     
 

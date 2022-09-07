@@ -130,8 +130,8 @@ def build_unit_table(probes_to_run, paths, syncDataset):
         except Exception as E:
             logging.error(E)
     
-        
-        
+    
+    print('successful probes:', successful_probes)
     #return  {k:probe_dict[k] for k in successful_probes}
     return pd.concat([probe_dict[k] for k in successful_probes])
             
