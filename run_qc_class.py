@@ -670,9 +670,14 @@ class run_qc_passive(run_qc):
         #analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
         analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
     
+    @_module_validation_decorator(data_streams=['pkl', 'sync'])
+    def behavior(self):
+        ### Behavior Analysis ###
+        behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
+        analysis.plot_running_wheel([self.mapping_data], behavior_plot_dir, prefix=self.figure_prefix)
     
     def _run_modules(self):
-        no_run_list = ['LFP', 'change_response', 'behavior']
+        no_run_list = ['LFP', 'change_response']
         module_list = [func for func in dir(self) if callable(getattr(self, func))]
         for module in module_list:
             if module[0] == '_' or module in no_run_list:
