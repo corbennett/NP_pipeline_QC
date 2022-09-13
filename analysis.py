@@ -500,8 +500,8 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
         axes[ind].plot(vs, 0.5*np.ones(len(vs)), '|')
         axes[ind].plot(dvs, 0.5*np.ones(len(dvs)), '|', ms=20)    
         
-        sd.plot_bit(4, son-1, son+2, axes=axes[ind])
-        sd.plot_bit(5, son-1, son+2, axes=axes[ind])
+        sd.plot_bit(4, son-1, son+2, axes=axes[ind], auto_show=False)
+        sd.plot_bit(5, son-1, son+2, axes=axes[ind], auto_show=False)
         axes[ind].set_xlim([son-1, son+2])
         axes[ind].legend(['vsyncs', 'diode_vsyncs', 'diode', 'stim_running'])
         axes[ind].get_legend().remove()
@@ -518,8 +518,8 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
         axes[ind].plot(vs, 0.5*np.ones(len(vs)), '|')
         axes[ind].plot(dvs, 0.5*np.ones(len(dvs)), '|', ms=20)
         
-        sd.plot_bit(4, soff-2, soff+1, axes=axes[ind])
-        sd.plot_bit(5, soff-2, soff+1, axes=axes[ind])
+        sd.plot_bit(4, soff-2, soff+1, axes=axes[ind], auto_show=False)
+        sd.plot_bit(5, soff-2, soff+1, axes=axes[ind], auto_show=False)
         axes[ind].set_xlim([soff-2, soff+1])
         axes[ind].legend(['vsyncs', 'diode_vsyncs', 'diode', 'stim_running'])
         axes[ind].get_legend().remove()

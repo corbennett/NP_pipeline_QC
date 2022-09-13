@@ -594,8 +594,8 @@ class run_qc_passive(run_qc):
     
         
         base_dir = os.path.dirname(self.SYNC_FILE)
-        mapping_pkl = glob.glob(os.path.join(base_dir, '*stim.pkl'))[0]
-        self.MAPPING_PKL = mapping_pkl
+        mapping_pkl = glob.glob(os.path.join(base_dir, '*stim.pkl')) + glob.glob(os.path.join(base_dir, '*PASSIVE*.pkl'))
+        self.MAPPING_PKL = mapping_pkl[0]
         print('Found mapping pkl: {}'.format(mapping_pkl))
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
         self.mapping_stim_index = [istim for istim,stim in enumerate(self.mapping_data['stimuli']) if \
@@ -659,7 +659,7 @@ class run_qc_passive(run_qc):
                                     epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
     
     
-    @_module_validation_decorator(data_streams=['sync', 'pkl'])
+    @_module_validation_decorator(data_streams=['sync'])
     def vsyncs(self):
         ### Plot vsync info ###
         vsync_save_dir = os.path.join(self.FIG_SAVE_DIR, 'vsyncs')
