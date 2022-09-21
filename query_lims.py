@@ -49,6 +49,12 @@ SPECIMEN_QRY = '''
     WHERE sp.external_specimen_name=cast({} as character varying)
     '''
     
+#BEHAVIOR_SESSION_BY_DATEQRY = '''
+#    SELECT *
+#    FROM behavior_sessions bs
+#    WHERE bs.date_of_acquisition > '9/01/2022 12:00:00 AM'
+#    '''
+    
 def query_lims(query_string):
     
     con = connect(
@@ -82,3 +88,15 @@ def get_specimen_id_from_labtracks_id(labtracks_id):
     
     mouse_info = query_lims(SPECIMEN_QRY.format(int(labtracks_id)))
     return mouse_info[0]['id']
+
+
+def get_project_from_labtracks_id(labtracks_id):
+    
+    mouse_info = query_lims(SPECIMEN_QRY.format(int(labtracks_id)))
+    project_id = mouse_info[0]['project_id']
+    project_info = query_lims(PROJECT_QRY.format(project_id))
+    
+    return project_info[0]['name']
+    
+    
+    
