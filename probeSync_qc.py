@@ -14,6 +14,7 @@ import glob, os, json, re
 import logging
 from xml.dom.minidom import parse
 import visual_behavior
+import pdb
 
 #for vsync alignment
 from typing import Union
@@ -584,6 +585,17 @@ def read_json(jsonfilepath):
     
 
 ###Functions to improve frame syncing###
+def partition_vsyncs(sync):
+    
+    vsync_times = sync.get_falling_edges('vsync_stim', 'seconds')
+    stimstarts, stimends = get_stim_starts_ends(sync)
+    final_vsyncs = []
+    for ie, (start, end) in enumerate(zip(stimstarts, stimends)):
+        epoch_vsyncs = vsync_times[(vsync_times>=start)&(vsync_times<=end)]
+        final_vsyncs.extend(epoch_vsyncs)
+    
+    return final_vsyncs
+    
 def get_experiment_frame_times(sync, photodiode_cycle=60, method='ccb'):
     
     photodiode_times = np.sort(np.concatenate([

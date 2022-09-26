@@ -7,12 +7,18 @@ Created on Sun Oct 18 12:30:43 2020
 
 from psycopg2 import connect, extras
 
-DONOR_QRY = '''
+DONOR_FROM_LABTRACKS_QRY = '''
     SELECT *
     FROM donors d
     WHERE d.external_donor_name=cast({} as character varying)
     '''
-    
+
+DONOR_QRY = '''
+    SELECT *
+    FROM donors d
+    WHERE d.id = {}
+    '''
+
 BEHAVIOR_SESSION_QRY = '''
     SELECT *
     FROM behavior_sessions bs
@@ -79,8 +85,14 @@ def query_lims(query_string):
     return result
 
 
+def get_labtracks_id_from_donor_id(donor_id):
+    
+    donor_info = query_lims(DONOR_QRY.format(donor_id))
+    return donor_info[0]['external_donor_name']
+    
+
 def get_donor_id_from_labtracks_id(labtracks_id):
-    mouse_info = query_lims(DONOR_QRY.format(int(labtracks_id)))
+    mouse_info = query_lims(DONOR_FROM_LABTRACKS_QRY.format(int(labtracks_id)))
     return mouse_info[0]['id']
 
 
@@ -96,7 +108,7 @@ def get_project_from_labtracks_id(labtracks_id):
     project_id = mouse_info[0]['project_id']
     project_info = query_lims(PROJECT_QRY.format(project_id))
     
-    return project_info[0]['name']
+    return project_info[0]['code']
     
     
     

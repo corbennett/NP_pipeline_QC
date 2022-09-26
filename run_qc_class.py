@@ -115,7 +115,8 @@ class run_qc():
         self.syncDataset = sync_dataset(self.SYNC_FILE)
         
         try:
-            vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
+            #vr, self.vf = probeSync.get_sync_line_data(self.syncDataset, channel=2)
+            self.vf = probeSync.partition_vsyncs(self.syncDataset)
             MONITOR_LAG = analysis.get_monitor_lag(self.syncDataset)
             if MONITOR_LAG>0.06:
                 self.errors.append(('vsync', 'abnormal monitor lag {}, using default {}'.format(MONITOR_LAG, 0.036)))
@@ -123,6 +124,13 @@ class run_qc():
     
             #self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
             self.FRAME_APPEAR_TIMES = probeSync.get_experiment_frame_times(self.syncDataset) #trying new vsync method
+            largest_monitor_lag = 0.5 #VERY LIBERAL BOUND, will only catch things that are catastrophically bad
+            if np.mean(np.abs(self.FRAME_APPEAR_TIMES - self.vf)) > largest_monitor_lag:
+                warning = 'Unexpected discrepancy between computed frame times and vsyncs, using raw vsyncs plus MONITOR_LAG'
+                self.errors.append(('vsync', warning))
+                print(warning)
+                self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+            
             self.MONITOR_LAG = MONITOR_LAG
             self.vsync_times = np.copy(self.vf)
         except:
