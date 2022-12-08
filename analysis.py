@@ -491,7 +491,7 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
         
     #plot beginning of stims
     fig, axes = plt.subplots(len(stim_ons))
-    if not isinstance(axes, list):
+    if not isinstance(axes, list) and not isinstance(axes, np.ndarray):
         axes = [axes]
     
     fig.suptitle('Stim Starts')
@@ -509,7 +509,7 @@ def plot_vsync_and_diode(syncDataset, FIG_SAVE_DIR, prefix=''):
         
     #plot end of stims
     fig, axes = plt.subplots(len(stim_offs))
-    if not isinstance(axes, list):
+    if not isinstance(axes, list) and not isinstance(axes, np.ndarray):
         axes = [axes]
         
     fig.suptitle('Stim Ends')
@@ -564,6 +564,46 @@ def plot_frame_intervals(vsyncs, behavior_frame_count, mapping_frame_count,
         save_figure(fig, os.path.join(save_dir, prefix+'stim_frame_intervals.png'))
 
 
+def plot_diode_intervals(sync, FIG_SAVE_DIR=None, prefix=''):
+    
+    fig, ax = plt.subplots()
+    fig.suptitle('Diode intervals')
+    
+    stim_running_r, stim_running_f = (sync.get_rising_edges('stim_running', 'seconds'),
+                                  sync.get_falling_edges('stim_running', 'seconds'))
+
+    #Get vsyncs that tell us when the graphics card buffer was flipped
+    vsyncs = sync.get_falling_edges('vsync_stim', units='seconds')
+    vsyncs = vsyncs[(stim_running_r[0]<=vsyncs) & (vsyncs<stim_running_f[0])]
+    photodiode_times = np.sort(np.concatenate([
+                    sync.get_rising_edges('stim_photodiode', 'seconds'),
+                    sync.get_falling_edges('stim_photodiode', 'seconds')
+                ]))
+    
+        
+    photodiode_times = photodiode_times[(stim_running_r[0]<=photodiode_times) & (photodiode_times<stim_running_f[0])]
+    
+    photodiode_times_on_off = probeSync.correct_on_off_effects(photodiode_times)
+    #removes blinking at beginning and end of each stimulus
+    photodiode_times_trimmed = probeSync.trim_border_pulses(
+                photodiode_times, vsyncs
+            )
+    
+    # not totally sure... correcting for on/off photodiode asymmetry
+    photodiode_times_on_off = probeSync.correct_on_off_effects(
+        photodiode_times_trimmed
+    )
+    
+    # fix blips in the line
+    photodiode_times_fixed = probeSync.fix_unexpected_edges(
+        photodiode_times_on_off, cycle=60)    
+    
+    ax.plot(photodiode_times_fixed[:-1], np.diff(photodiode_times_fixed))
+   
+    if FIG_SAVE_DIR is not None:
+        save_figure(fig, os.path.join(FIG_SAVE_DIR, prefix+'diode_intervals.png'))
+    
+    
 def plot_vsync_interval_histogram(vf, FIG_SAVE_DIR=None, prefix=''):
     
     fig, ax = plt.subplots(constrained_layout=True)
@@ -1128,12 +1168,13 @@ def lost_camera_frame_report(paths, FIG_SAVE_DIR, prefix='', cam_report_keys=Non
     save_json(report, save_file)
     
 
-def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoch_end_times, epoch_frame_nums = [4,2,4], prefix='', cam_video_keys=None):
+def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoch_end_times, 
+                       epoch_frame_nums = [4,2,4], prefix='', cam_video_keys=None, epoch_names=['Behavior', 'Mapping', 'Replay']):
     
     if cam_video_keys is None:
-        cam_video_keys = [('RawBehaviorTrackingVideo', 'Behavior', 'beh_frame_received'),
-                           ('RawEyeTrackingVideo', 'Eye', 'eye_frame_received'),
-                           ('RawFaceTrackingVideo', 'Face', 'face_frame_received')]
+        cam_video_keys = [('RawBehaviorTrackingVideo', 'Behavior', 'beh_cam_exposing'),
+                           ('RawEyeTrackingVideo', 'Eye', 'eye_cam_exposing'),
+                           ('RawFaceTrackingVideo', 'Face', 'face_cam_exposing')]
     
     videos_present = [c for c in cam_video_keys if c[0] in paths]
     num_videos = len(videos_present)
@@ -1142,6 +1183,8 @@ def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoc
     frames_to_grab = get_frames_from_epochs(videos_present, syncDataset, 
                                             epoch_start_times, epoch_end_times, epoch_frame_nums)
     
+#    print(epoch_start_times, epoch_end_times)
+#    print(frames_to_grab)
     cumulative_epoch_frames = np.cumsum(epoch_frame_nums)
     epoch_colors = ['k', 'g', 'r']
     get_epoch = lambda x: np.where(cumulative_epoch_frames>x)[-1][0]
@@ -1170,7 +1213,7 @@ def camera_frame_grabs(paths, syncDataset, FIG_SAVE_DIR, epoch_start_times, epoc
             ax.spines['left'].set_color(epoch_colors[frame_epoch])
     
     for e,ec,name,c in zip(epoch_frame_nums, cumulative_epoch_frames, 
-                           ['Behavior', 'Mapping', 'Replay'], epoch_colors):
+                           epoch_names, epoch_colors):
         
         xcoord = (ec - e/2)/np.sum(epoch_frame_nums)        
         fig.text(xcoord, 0.97, name, color=c, size='large', ha='center')
@@ -1510,3 +1553,38 @@ def list_depth(ll, depth=0):
         depth = list_depth(l, depth)
     
     return depth
+
+import matplotlib
+def formatFigure(fig, ax, title=None, xLabel=None, yLabel=None, xTickLabels=None, yTickLabels=None, blackBackground=False, saveName=None):
+    fig.set_facecolor('w')
+    font = {'family' : 'normal',
+        'weight' : 'regular',
+        'size'   : 15}
+
+    matplotlib.rc('font', **font)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.tick_params(direction='out',top=False,right=False)
+    
+    if xTickLabels is not None:
+        ax.set_xticklabels(xTickLabels)
+
+    if title is not None:
+        ax.set_title(title)
+    if xLabel is not None:
+        ax.set_xlabel(xLabel)
+    if yLabel is not None:
+        ax.set_ylabel(yLabel)
+        
+    if blackBackground:
+        ax.set_axis_bgcolor('k')
+        ax.tick_params(labelcolor='w', color='w')
+        ax.xaxis.label.set_color('w')
+        ax.yaxis.label.set_color('w')
+        for side in ('left','bottom'):
+            ax.spines[side].set_color('w')
+
+        fig.set_facecolor('k')
+        fig.patch.set_facecolor('k')
+    if saveName is not None:
+        fig.savefig(saveName, facecolor=fig.get_facecolor())

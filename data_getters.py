@@ -262,16 +262,20 @@ class local_data_getter(data_getter):
     
     def get_platform_info(self):
         
-        platform_file = self.data_dict['EcephysPlatformFile']
-        with open(platform_file, 'r') as file:
-            self.platform_info = json.load(file)
+        platform_file = self.data_dict.get('EcephysPlatformFile', None)
+        if platform_file:
+            with open(platform_file, 'r') as file:
+                self.platform_info = json.load(file)
+        
+        else:
+            self.platform_info = {}
     
     def get_rig_from_platform(self):
         
         if not hasattr(self, 'platform_info'):
             self.get_platform_info()
         
-        return self.platform_info['rig_id']
+        return self.platform_info.get('rig_id', 'none found')
         
         
     def get_probe_data(self):

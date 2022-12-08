@@ -129,7 +129,7 @@ class run_qc():
                 warning = 'Unexpected discrepancy between computed frame times and vsyncs, using raw vsyncs plus MONITOR_LAG'
                 self.errors.append(('vsync', warning))
                 print(warning)
-                self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
+                #self.FRAME_APPEAR_TIMES = self.vf + MONITOR_LAG
             
             self.MONITOR_LAG = MONITOR_LAG
             self.vsync_times = np.copy(self.vf)
@@ -353,7 +353,7 @@ class run_qc():
         analysis.plot_vsync_interval_histogram(self.vf, vsync_save_dir, prefix = self.figure_prefix)
         analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
         analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
-
+        analysis.plot_diode_intervals(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
 
     def probe_noise(self, data_chunk_size=1):
         if self.probeinfo_dict is None:
@@ -676,7 +676,10 @@ class run_qc_passive(run_qc):
 #                                      self.replay_start_frame, vsync_save_dir, prefix=self.figure_prefix) 
         analysis.plot_vsync_interval_histogram(self.vf, vsync_save_dir, prefix = self.figure_prefix)
         #analysis.vsync_report(self.syncDataset, self.total_pkl_frames, vsync_save_dir, prefix = self.figure_prefix)
-        analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir , prefix=self.figure_prefix)
+        analysis.plot_vsync_and_diode(self.syncDataset, vsync_save_dir, prefix=self.figure_prefix)
+        analysis.plot_diode_intervals(self.syncDataset, vsync_save_dir, prefix=self.figure_prefix)
+        
+        
     
     @_module_validation_decorator(data_streams=['pkl', 'sync'])
     def behavior(self):
@@ -734,9 +737,12 @@ class DR1(run_qc):
             self._load_sync_data()
     
         self.behavior_data = pd.read_pickle(self.BEHAVIOR_PKL)
-        self.behavior_session = DocData(self.BEHAVIOR_PKL)
-        self.behavior_session.loadBehavData()
-        #self.trials = behavior_analysis.get_trials_df(self.behavior_data)
+        try:
+            # non DoC pkl format
+            self.behavior_session = DocData(self.BEHAVIOR_PKL)
+            self.behavior_session.loadBehavData()
+        except:    
+            self.trials = behavior_analysis.get_trials_df(self.behavior_data)
 
         self.mapping_data = pd.read_pickle(self.MAPPING_PKL)
 
@@ -750,9 +756,20 @@ class DR1(run_qc):
                             self.mapping_frame_count +
                             self.replay_frame_count) 
 
-#        # look for potential frame offsets from aborted stims
-        (self.behavior_start_frame, self.mapping_start_frame) = probeSync.get_frame_offsets(self.syncDataset, 
-            [self.behavior_frame_count, self.mapping_frame_count])
+        #Figure out which stim came first
+        mapping_starttime = self.mapping_data['startdatetime']
+        behavior_starttime = self.behavior_data['start_time']
+        
+        if behavior_starttime < mapping_starttime:
+            
+            # look for potential frame offsets from aborted stims
+            (self.behavior_start_frame, self.mapping_start_frame) = probeSync.get_frame_offsets(self.syncDataset, 
+                [self.behavior_frame_count, self.mapping_frame_count])
+        
+        else:
+            (self.mapping_start_frame, self.behavior_start_frame) = probeSync.get_frame_offsets(self.syncDataset, 
+                [self.mapping_frame_count, self.behavior_frame_count])
+        
         
         self.replay_start_frame = self.total_pkl_frames
 #
@@ -775,7 +792,8 @@ class DR1(run_qc):
         analysis.lost_camera_frame_report(self.paths, video_dir, prefix=self.figure_prefix)
         analysis.camera_frame_grabs(self.paths, self.syncDataset, video_dir, 
                                     frame_times[:-1], frame_times[1:],
-                                    epoch_frame_nums = frames_for_each_epoch, prefix=self.figure_prefix)
+                                    epoch_frame_nums = frames_for_each_epoch, 
+                                    epoch_names=['1/3', '2/3', '3/3'], prefix=self.figure_prefix)
     
     @_module_validation_decorator(data_streams=['pkl', 'sync', 'unit'])
     def change_response(self):
@@ -796,9 +814,15 @@ class DR1(run_qc):
     def behavior(self):
         ### Behavior Analysis ###
         behavior_plot_dir = os.path.join(self.FIG_SAVE_DIR, 'behavior')
-        self.behavior_session.plot_licks_from_change(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
-        self.behavior_session.plotSummary(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
-        self.behavior_session.trial_pie(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+        try:
+            trials = behavior_analysis.get_trials_df(self.behavior_data)
+            behavior_analysis.plot_behavior(self.trials, behavior_plot_dir, prefix=self.figure_prefix)
+            behavior_analysis.plot_trial_licks(self.trials, self.vsync_times, self.behavior_start_frame, behavior_plot_dir, prefix=self.figure_prefix)
         
+        except:
+            self.behavior_session.plot_licks_from_change(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+            self.behavior_session.plotSummary(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+            self.behavior_session.trial_pie(save_dir=behavior_plot_dir, prefix=self.figure_prefix)
+            
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
         analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)
