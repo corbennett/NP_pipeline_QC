@@ -752,7 +752,7 @@ def plot_change_response_DR(probe_dict, behavior_start_frame,
     
     
     block_change_times = [np.array(bl)[~np.isnan(bl)].astype(int) for bl in block_change_frames]
-    block_change_times = [FRAME_APPEAR_TIMES[bl] for bl in block_change_times]
+    block_change_times = [FRAME_APPEAR_TIMES[bl+behavior_start_frame] for bl in block_change_times]
     
     lfig, lax = plt.subplots()
     preTime = 0.75

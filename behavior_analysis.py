@@ -108,7 +108,43 @@ def plot_trial_licks(trials, frame_times, behavior_start_frame, save_dir=None, p
     if save_dir is not None:
         save_figure(fig, os.path.join(save_dir, prefix+'trial_licks.png'))
 
+
+
+def get_behavior_mat(trials, image_names=None):
     
+    if image_names is None:    
+        image_names = trials['initial_image_name'].unique()
+        image_names = np.array(image_names)
+    
+    
+    image_number = len(image_names)
+   
+    behavior_response_mat = np.zeros((image_number,image_number))
+    behavior_count_mat = np.zeros((image_number,image_number))
+    for it, trial in trials.iterrows():
+        response_type = trial['response_type']
+        if response_type=='EARLY_RESPONSE' or trial['auto_rewarded']:
+            continue
+        
+        previous_image = trial['initial_image_name']
+        change_image = trial['change_image_name']
+        
+        xind = np.where(image_names==previous_image)[0][0]
+        yind = np.where(image_names==change_image)[0][0]
+        
+        behavior_count_mat[xind, yind] += 1
+        
+        response = bool(np.isin(response_type, ['FA', 'HIT']))
+        behavior_response_mat[xind, yind] += int(response)
+        #return len(group)
+#    except:
+#        return np.full((8,8), np.nan)
+    return image_names, behavior_response_mat/behavior_count_mat    
+    
+
+
+
+
 def save_figure(fig, save_path):
     
     save_dir = os.path.dirname(save_path)
