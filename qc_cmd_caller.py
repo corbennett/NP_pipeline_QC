@@ -93,15 +93,14 @@ if __name__ == "__main__":
     parser.add_argument("-proj", "--project", help='name of project for this experiment: DR1--DynamicRouting task1', default='')
     
     args = parser.parse_args()
-    modules_to_run = parse_command_line_list(args.modules_to_run)
-    destination = args.destination
+    args.modules_to_run = parse_command_line_list(args.modules_to_run)
 
     if args.habituation:
-        if destination == r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC":
-            destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
-        modules_to_run = 'behavior'
-
-    call_qc(args.session, args.probes, args.cortical_sort, destination, modules_to_run, args.habituation, args.passive, args.project)
+        if args.destination == r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC":
+            args.destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
+        args.modules_to_run = 'behavior'
+        
+    call_qc(**vars(args))
         
     
     
