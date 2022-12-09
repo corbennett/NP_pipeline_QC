@@ -15,7 +15,7 @@ import argparse
 
 def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
             destination=r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC",
-            modules_to_run='all', habituation=False, passive=False, project=''):
+            modules_to_run='all', habituation=False, passive=False, project='', **kwargs):
 
     session_name = os.path.basename(session)
     print('\nRunning QC for session {} \n'
@@ -40,7 +40,7 @@ def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
 
     
     r=qc_class(session, destination, probes_to_run=probes_to_run, 
-        cortical_sort=cortical_sort, modules_to_run=modules_to_run)
+        cortical_sort=cortical_sort, modules_to_run=modules_to_run, **kwargs)
     
     if len(r.errors)>0:
         print('Error(s) encountered: {}  \n'
