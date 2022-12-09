@@ -12,6 +12,7 @@ Created on Fri Jul 10 15:42:31 2020
 @author: svc_ccg
 """
 
+from typing import Optional
 import numpy as np
 import os, glob, shutil
 import json
@@ -826,3 +827,72 @@ class DR1(run_qc):
             
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
         analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)
+        
+class DR1_DJ(DR1):
+    """Modifies probe paths to point to sorted data downloaded from DataJoint. 
+    Directory structure is the same as local session folders, e.g. on np-exp, so only
+    the root paths need modification if we're working with paths from
+    data_getters.local_data_getter.  
+    
+    """
+
+    dj_root_dir: str = r'\\allen\programs\mindscope\workgroups\dynamicrouting\datajoint\inbox'
+    
+    def __init__(self, *args, dj_kilosort_paramset_idx: int = 1, **kwargs):
+        self.dj_paramset_idx = dj_kilosort_paramset_idx
+        self.dj_root_dir = kwargs.get('dj_root_dir', self.dj_root_dir)
+        super().__init__(*args, **kwargs)
+    
+    @property
+    def session_foldername(self) -> str:
+        "[lims_id]_[mouse_id]_[datestring]"
+        return f"{self.paths['es_id']}_{self.paths['external_specimen_name']}_{self.paths['datestring']}"
+    
+    @property
+    def session_root_dir_parent(self) -> Optional[str]:
+        """Path to dir containing `session_foldername`: e.g. np-exp, which is replaced.
+            Returns None if we're working with data on lims.
+        """
+        if not hasattr(self.paths) or self.paths is None:
+            return None
+        if self.session_foldername not in self.paths['EcephysPlatformFile']:
+            return None
+        return os.path.split(self.paths['EcephysPlatformFile'].split(self.session_foldername)[0])[0] # rm trailing slashes
+    
+    @property
+    def ks_paramset_idx_subdir(self) -> str:
+        return f'ks_paramset_idx_{self.dj_paramset_idx}'
+    
+    @property
+    def dj_session_root_dir_parent(self) -> str:
+        """Path to dir containing `session_foldername` for DJ data with specific Kilosort paramset."""
+        return os.path.join(self.dj_root_dir, self.ks_paramset_idx_subdir)    
+    
+    @property
+    def paths(self) -> Optional[dict]:
+        "Modified paths pointing to local DataJoint dir for sorted probe data."
+        if not hasattr(self, '_dj_paths'):
+            return None
+        return self._dj_paths
+
+    @paths.setter
+    def paths(self, value: dict):
+        if value is None:
+            return
+        for probe_letter in value['data_probes']:
+            for k, v in value.items():
+                if f'probe{probe_letter}' in k or all(s in k for s in ['probe', f'_{probe_letter}']):
+                    # skips the keys 'lfpA', 'lfpB', ...
+                    value[k] = self.replace_sorted_probe_paths(path=v, probe_letter=probe_letter)
+        self._dj_paths = value
+        
+    
+    def replace_sorted_probe_paths(self, path: str, probe_letter: str) -> str:
+        if self.session_root_dir_parent is None:
+            # TODO
+            # data is on lims - all sorted probe data is in a flat structure so we need
+            # reconstruct the subfolders with the correct probe letter
+            return path
+        else:
+            path = path.replace(self.session_root_dir_parent, self.dj_session_root_dir_parent)
+            return path

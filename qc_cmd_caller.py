@@ -92,6 +92,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-proj", "--project", help='name of project for this experiment: DR1--DynamicRouting task1', default='')
     
+    parser.add_argument("-dj", "--dj_paramset_idx", help='value of `paramset_idx` used for sorting on DataJoint (int)', type=int, default=1)
+    
     args = parser.parse_args()
     args.modules_to_run = parse_command_line_list(args.modules_to_run)
 
