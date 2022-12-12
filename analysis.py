@@ -193,6 +193,8 @@ def plot_AP_band_noise(probe_dirs, probes_to_run, probe_info_dicts, FIG_SAVE_DIR
         pdir = [d for d in probe_dirs if 'probe'+pid in d][0]
         datfilepath = glob_file(os.path.join(pdir, 'continuous\\Neuropix-PXI-100.0'), 'continuous.dat')
         
+        datfilepath = os.path.realpath(datfilepath)
+        
         chunk, chan_std = calculate_probe_noise(datfilepath, chunk_size= data_chunk_size, return_chunk=True)
         
         fig, ax = plt.subplots()
