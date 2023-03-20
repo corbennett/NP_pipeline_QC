@@ -11,6 +11,8 @@ source_volume_config = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\N
 with open(source_volume_config, 'r') as f:
     sources = json.load(f)
 
+sources = '//allen/programs/mindscope/workgroups/np-exp'
+
 # configuring how to find paths to the sorting data
 default_sorting_directory = 'E' 
 default_probe_directory_format = r"{}_{}_sorted"
@@ -100,8 +102,7 @@ def validate_d2_files(sessionID, acq_computer_name):
     print('running validation on following probes: {}'.format(probes_to_run))
     
     for probe in probes_to_run:
-        expected_probe_base = os.path.join(acq_computer_name, 
-                                            default_sorting_directory,
+        expected_probe_base = os.path.join(network_session_directory, 
                                             default_probe_directory_format.format(sessionID, probe))
         probe_base = glob.glob(expected_probe_base)
         print(os.path.normpath(expected_probe_base))

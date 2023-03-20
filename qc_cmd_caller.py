@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("session",
                     help="full path to session directory")
     
-    parser.add_argument("-p", "--probes", 
+    parser.add_argument("-p", "--probes_to_run", 
                     help= "list of probes to run (default ABCDEF)",
                     default='ABCDEF')
     
