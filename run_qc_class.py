@@ -835,22 +835,42 @@ class DR1(run_qc):
         
 class DR1_DJ(DR1):
     """Modifies probe paths to point to sorted data downloaded from DataJoint. 
-    Directory structure is the same as local session folders, e.g. on np-exp, so only
-    the root paths need modification if we're working with paths from
+    Directory structure is the same as for locally-sorted probe folders, e.g. on np-exp, so only
+    the path roots need modification if we're working with paths from
     data_getters.local_data_getter.  
+    
+    By default, we skip download of large files from DataJoint (incl. median-subtracted
+    AP .dat) - instead, we make a symlink to the original raw data file to be used in
+    its place. 
+    
+    `os.path.realpath(path)` or `pathlib.Path(path).resolve()` convert a
+    symlink path to its target path.
+    
+    Other files also require copying/modifying from the original raw data dirs (e.g.
+    sample_numbers, timestamps) for Open Ephys output from v0.6+. These may be
+    symlinks in sorted probe folders, so we use `realpath()/resolve()` on all probe data paths.
+    
+    If symlink targets have been removed, the sorted data will need to be re-downloaded
+    from DataJoint (~5 mins per 6-probe session).
+    
+    Lims upload copy utility doesn't follow symlinks or use realpath/resolve.
     """
     # TODO AP continuous.dat files currently aren't downloaded from DataJoint
-    
+        
     dj_root_dir: str = r'\\allen\programs\mindscope\workgroups\dynamicrouting\datajoint\inbox'
     
-    def __init__(self, *args, dj_kilosort_paramset_idx: int = 1, **kwargs):
-        self.session_root_dir = args[0]
+    def __init__(self, session_root_dir, *args, dj_kilosort_paramset_idx: int = 1, **kwargs):
+        subprocess.run('fsutil behavior set SymlinkEvaluation R2R:1') # we need Remote2Remote symlinks enabled
+        self.session_root_dir = session_root_dir
         self.dj_paramset_idx = dj_kilosort_paramset_idx
         self.dj_root_dir = kwargs.get('dj_root_dir', self.dj_root_dir)
         print('Using sorted probe data from DataJoint\n')
         super().__init__(*args, **kwargs)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/corbett
     @property
     def session_foldername(self) -> str:
         "[lims_id]_[mouse_id]_[datestring]"
@@ -882,38 +902,24 @@ class DR1_DJ(DR1):
     @paths.setter
     def paths(self, paths: dict):
         self._paths = paths
-        self._dj_paths = self.replaced_sorted_probe_paths(paths)
+        self._dj_paths = self._replaced_sorted_probe_paths(paths)
 
-    def replaced_sorted_probe_paths(self, paths: dict) -> dict:
+    def _replaced_sorted_probe_paths(self, paths: dict) -> dict:
         "Return dict with sorted probe paths replaced"
         paths = copy.copy(paths) # suffices as we're only modifying strings
         for probe_letter in paths['data_probes']:
             for k, v in paths.items():
                 if not v:
                     continue
-                if 'lfp' in k:
-                    continue
-                if f'probe{probe_letter}' in k or all(s in k for s in ['probe', f'_{probe_letter}']):
-                    paths[k] = self.replace_sorted_probe_path(path=v, probe_letter=probe_letter)
+                if any(f'{s}{probe_letter}' in k for s in ('probe', 'lfp')) or all(s in k for s in ('probe', f'_{probe_letter}')):
+                    paths[k] = self._replace_sorted_probe_path(path=v, probe_letter=probe_letter)
         return paths 
 
-    def replace_sorted_probe_path(self, path: str, probe_letter: str) -> str:
+    def _replace_sorted_probe_path(self, path: str, probe_letter: str) -> str:
         if self.session_root_dir_parent is None:
             # TODO
             # data is on lims - we need to reconstruct the subfolders with the correct probe letter
             return path
         else:
             newpath = path.replace(self.session_root_dir_parent, self.dj_session_root_dir_parent)
-            return newpath
-
-    def replace_files_missing_from_datajoint_download(self):        
-        # TODO move this func to np_datajoint and call with cls.download()
-        
-        # DJ sorted output doesn't come with events folder. 
-        # we can get these from np-exp for data sorted locally - but in future if we're not sorting locally
-        # we'll have to get from raw data and incorporate translater from ecephys sorting pipeline for v0.6+ OEphys
-
-        for path in glob.glob(os.path.join(self.session_root_dir_parent, self.session_foldername, '*probe*_sorted/events')):
-            dest = path.replace(self.session_root_dir_parent, self.dj_session_root_dir_parent)
-            print(f'coying {path} to {dest}')
-            shutil.copytree(path, dest, dirs_exist_ok=True)
+            return os.path.realpath(newpath)
