@@ -46,8 +46,8 @@ def get_ephys_barcodes(probeBase):
 
     probeTTLDir = os.path.join(probeBase, r'events\\Neuropix-PXI-100.0\\TTL_1')
     
-    channel_states = np.load(os.path.join(probeTTLDir, 'channel_states.npy'))
-    event_times = np.load(os.path.join(probeTTLDir, 'event_timestamps.npy'))
+    channel_states = np.load(os.path.realpath(os.path.join(probeTTLDir, 'channel_states.npy')))
+    event_times = np.load(os.path.realpath(os.path.join(probeTTLDir, 'event_timestamps.npy')))
     
     beRising = event_times[channel_states>0]/30000.
     beFalling = event_times[channel_states<0]/30000.
@@ -216,12 +216,12 @@ def load_spike_info(spike_data_dir, p_sampleRate, shift):
     '''
     print(p_sampleRate)
     print(shift)
-    spike_clusters = np.load(os.path.join(spike_data_dir, 'spike_clusters.npy'))
-    spike_times = np.load(os.path.join(spike_data_dir, 'spike_times.npy'))
-    templates = np.load(os.path.join(spike_data_dir, 'templates.npy'))
-    spike_templates = np.load(os.path.join(spike_data_dir, 'spike_templates.npy'))
-    channel_positions = np.load(os.path.join(spike_data_dir, 'channel_positions.npy'))
-    amplitudes = np.load(os.path.join(spike_data_dir, 'amplitudes.npy'))
+    spike_clusters = np.load(os.path.realpath(os.path.join(spike_data_dir, 'spike_clusters.npy')))
+    spike_times = np.load(os.path.realpath(os.path.join(spike_data_dir, 'spike_times.npy')))
+    templates = np.load(os.path.realpath(os.path.join(spike_data_dir, 'templates.npy')))
+    spike_templates = np.load(os.path.realpath(os.path.join(spike_data_dir, 'spike_templates.npy')))
+    channel_positions = np.load(os.path.realpath(os.path.join(spike_data_dir, 'channel_positions.npy')))
+    amplitudes = np.load(os.path.realpath(os.path.join(spike_data_dir, 'amplitudes.npy')))
     unit_ids = np.unique(spike_clusters)
     
     units = {}
@@ -256,7 +256,7 @@ def getLFPData(probeBase, syncDataset, num_channels=384):
     
     probeTTLDir = os.path.join(probeBase, r'events\\Neuropix-PXI-100.0\\TTL_1')
     lfp_data_dir = os.path.join(probeBase, r'continuous\\Neuropix-PXI-100.1')
-    lfp_data_file = os.path.join(lfp_data_dir, 'continuous.dat')
+    lfp_data_file = os.path.realpath(os.path.join(lfp_data_dir, 'continuous.dat'))
     
     
     if not os.path.exists(lfp_data_file):
@@ -265,14 +265,14 @@ def getLFPData(probeBase, syncDataset, num_channels=384):
     
     lfp_data = np.memmap(lfp_data_file, dtype='int16', mode='r')    
     lfp_data_reshape = np.reshape(lfp_data, [int(lfp_data.size/num_channels), -1])
-    time_stamps = np.load(os.path.join(lfp_data_dir, 'lfp_timestamps.npy'))
+    time_stamps = np.load(os.path.realpath(os.path.join(lfp_data_dir, 'lfp_timestamps.npy')))
         
     
     bRising, bFalling = get_sync_line_data(syncDataset, channel=0)
     bs_t, bs = ecephys.extract_barcodes_from_times(bRising, bFalling)
     
-    channel_states = np.load(os.path.join(probeTTLDir, 'channel_states.npy'))
-    event_times = np.load(os.path.join(probeTTLDir, 'event_timestamps.npy'))
+    channel_states = np.load(os.path.realpath(os.path.join(probeTTLDir, 'channel_states.npy')))
+    event_times = np.load(os.path.realpath(os.path.join(probeTTLDir, 'event_timestamps.npy')))
     
     beRising = event_times[channel_states>0]/30000.
     beFalling = event_times[channel_states<0]/30000.

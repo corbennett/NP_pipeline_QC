@@ -12,26 +12,32 @@ Created on Fri Jul 10 15:42:31 2020
 @author: svc_ccg
 """
 
-import numpy as np
-import os, glob, shutil
+import copy
+import glob
 import json
+import logging
+import os
+import shutil
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+
+import analysis
 import behavior_analysis
+import data_getters
+import probeSync_qc as probeSync
+from get_RFs_standalone import get_RFs
+from query_lims import query_lims
 #from visual_behavior.ophys.sync import sync_dataset
 from sync_dataset import Dataset as sync_dataset
-import pandas as pd
-import analysis
-import probeSync_qc as probeSync
-import data_getters
-from get_RFs_standalone import get_RFs
-import logging 
-from query_lims import query_lims
 from task1_behavior_session import DocData
 
 
 class run_qc():
 
     def __init__(self, exp_id, save_root, modules_to_run='all', 
-                 cortical_sort=False, probes_to_run='ABCDEF', ctx_units_percentile=50):
+                 cortical_sort=False, probes_to_run='ABCDEF', ctx_units_percentile=50, **kwargs):
 
         self.modules_to_run = modules_to_run
         self.errors = []
@@ -826,3 +832,94 @@ class DR1(run_qc):
             
         pkl_list = [getattr(self, pd) for pd in ['behavior_data', 'mapping_data', 'replay_data'] if hasattr(self, pd)]
         analysis.plot_running_wheel(pkl_list, behavior_plot_dir, save_plotly=False, prefix=self.figure_prefix)
+        
+class DR1_DJ(DR1):
+    """Modifies probe paths to point to sorted data downloaded from DataJoint. 
+    Directory structure is the same as for locally-sorted probe folders, e.g. on np-exp, so only
+    the path roots need modification if we're working with paths from
+    data_getters.local_data_getter.  
+    
+    By default, we skip download of large files from DataJoint (incl. median-subtracted
+    AP .dat) - instead, we make a symlink to the original raw data file to be used in
+    its place. 
+    
+    `os.path.realpath(path)` or `pathlib.Path(path).resolve()` convert a
+    symlink path to its target path.
+    
+    Other files also require copying/modifying from the original raw data dirs (e.g.
+    sample_numbers, timestamps) for Open Ephys output from v0.6+. These may be
+    symlinks in sorted probe folders, so we use `realpath()/resolve()` on all probe data paths.
+    
+    If symlink targets have been removed, the sorted data will need to be re-downloaded
+    from DataJoint (~5 mins per 6-probe session).
+    
+    Lims upload copy utility doesn't follow symlinks or use realpath/resolve.
+    """
+    # TODO AP continuous.dat files currently aren't downloaded from DataJoint
+        
+    dj_root_dir: str = r'\\allen\programs\mindscope\workgroups\dynamicrouting\datajoint\inbox'
+    
+    def __init__(self, session_root_dir, *args, dj_kilosort_paramset_idx: int = 1, **kwargs):
+        subprocess.run('fsutil behavior set SymlinkEvaluation R2R:1') # we need Remote2Remote symlinks enabled
+        self.session_root_dir = session_root_dir
+        self.dj_paramset_idx = dj_kilosort_paramset_idx
+        self.dj_root_dir = kwargs.get('dj_root_dir', self.dj_root_dir)
+        print('Using sorted probe data from DataJoint\n')
+        super().__init__(*args, **kwargs)
+
+<<<<<<< HEAD
+
+=======
+>>>>>>> origin/corbett
+    @property
+    def session_foldername(self) -> str:
+        "[lims_id]_[mouse_id]_[datestring]"
+        return f"{self._paths['es_id']}_{self._paths['external_specimen_name']}_{self._paths['datestring']}"
+    
+    @property
+    def session_root_dir_parent(self) -> Optional[str]:
+        """Path to dir containing `session_foldername`: e.g. np-exp, which is replaced.
+            Returns None if we're working with data on lims.
+        """
+        if self.session_foldername not in self.session_root_dir:
+            return None
+        return os.path.dirname(self.session_root_dir)
+    
+    @property
+    def ks_paramset_idx_subdir(self) -> str:
+        return f'ks_paramset_idx_{self.dj_paramset_idx}'
+    
+    @property
+    def dj_session_root_dir_parent(self) -> str:
+        """Path to dir containing `session_foldername` for DJ data with specific Kilosort paramset."""
+        return os.path.join(self.dj_root_dir, self.ks_paramset_idx_subdir)    
+    
+    @property
+    def paths(self) -> dict:
+        "Modified paths pointing to local DataJoint dir for sorted probe data."            
+        return self._dj_paths
+
+    @paths.setter
+    def paths(self, paths: dict):
+        self._paths = paths
+        self._dj_paths = self._replaced_sorted_probe_paths(paths)
+
+    def _replaced_sorted_probe_paths(self, paths: dict) -> dict:
+        "Return dict with sorted probe paths replaced"
+        paths = copy.copy(paths) # suffices as we're only modifying strings
+        for probe_letter in paths['data_probes']:
+            for k, v in paths.items():
+                if not v:
+                    continue
+                if any(f'{s}{probe_letter}' in k for s in ('probe', 'lfp')) or all(s in k for s in ('probe', f'_{probe_letter}')):
+                    paths[k] = self._replace_sorted_probe_path(path=v, probe_letter=probe_letter)
+        return paths 
+
+    def _replace_sorted_probe_path(self, path: str, probe_letter: str) -> str:
+        if self.session_root_dir_parent is None:
+            # TODO
+            # data is on lims - we need to reconstruct the subfolders with the correct probe letter
+            return path
+        else:
+            newpath = path.replace(self.session_root_dir_parent, self.dj_session_root_dir_parent)
+            return os.path.realpath(newpath)

@@ -15,7 +15,7 @@ import argparse
 
 def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
             destination=r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC",
-            modules_to_run='all', habituation=False, passive=False, project=''):
+            modules_to_run='all', habituation=False, passive=False, project='', **kwargs):
 
     session_name = os.path.basename(session)
     print('\nRunning QC for session {} \n'
@@ -40,7 +40,7 @@ def call_qc(session, probes_to_run='ABCDEF', cortical_sort=True,
 
     
     r=qc_class(session, destination, probes_to_run=probes_to_run, 
-        cortical_sort=cortical_sort, modules_to_run=modules_to_run)
+        cortical_sort=cortical_sort, modules_to_run=modules_to_run, **kwargs)
     
     if len(r.errors)>0:
         print('Error(s) encountered: {}  \n'
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("session",
                     help="full path to session directory")
     
-    parser.add_argument("-p", "--probes", 
+    parser.add_argument("-p", "--probes_to_run", 
                     help= "list of probes to run (default ABCDEF)",
                     default='ABCDEF')
     
@@ -92,16 +92,17 @@ if __name__ == "__main__":
 
     parser.add_argument("-proj", "--project", help='name of project for this experiment: DR1--DynamicRouting task1', default='')
     
+    parser.add_argument("-dj", "--dj_kilosort_paramset_idx", help='value of `paramset_idx` used for sorting on DataJoint (int)', type=int, default=1)
+    
     args = parser.parse_args()
-    modules_to_run = parse_command_line_list(args.modules_to_run)
-    destination = args.destination
+    args.modules_to_run = parse_command_line_list(args.modules_to_run)
 
     if args.habituation:
-        if destination == r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC":
-            destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
-        modules_to_run = 'behavior'
-
-    call_qc(args.session, args.probes, args.cortical_sort, destination, modules_to_run, args.habituation, args.passive, args.project)
+        if args.destination == r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC":
+            args.destination = r"\\allen\programs\braintv\workgroups\nc-ophys\corbettb\NP_behavior_pipeline\QC\habituation"
+        args.modules_to_run = 'behavior'
+        
+    call_qc(**vars(args))
         
     
     
