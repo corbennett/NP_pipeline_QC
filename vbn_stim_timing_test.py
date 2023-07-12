@@ -16,6 +16,7 @@ from allensdk.brain_observatory.ecephys.file_io.stim_file import (
     CamStimOnePickleStimFile,
 )
 
+#####MOVED THESE FILES TO NP-BEHAVIOR ON ISILON####
 behavior_data = pd.read_pickle(r"C:\Users\svc_ccg\Desktop\VBN_timing_test\220510180649.pkl")
 mapping_data = pd.read_pickle(r"C:\Users\svc_ccg\Desktop\VBN_timing_test\220510183227-script.pkl")
 

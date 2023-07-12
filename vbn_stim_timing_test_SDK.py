@@ -6,7 +6,7 @@ from allensdk.brain_observatory.sync_dataset import \
 from allensdk.brain_observatory.ecephys.align_timestamps.barcode import extract_barcodes_from_times, get_probe_time_offset
 from matplotlib import pyplot as plt
 
-# GET DATA
+# MOVED THESE FILES TO NP BEHAVIOR ON ISILON TO SAVE LOCAL DISK SPACE ####
 syncDataset = SyncDataset(r"\\allen\programs\mindscope\workgroups\np-exp\VBN_timing_validation\20220516T183524.h5")
 datPath = r"\\allen\programs\mindscope\workgroups\np-exp\VBN_timing_validation\2022-05-16_18-35-30\Record Node 105\experiment1\recording1\continuous\NI-DAQmx-103.0\continuous.dat"
 ttlStatesPath = r"\\allen\programs\mindscope\workgroups\np-exp\VBN_timing_validation\2022-05-16_18-35-30\Record Node 105\experiment1\recording1\events\NI-DAQmx-103.0\TTL_1\channel_states.npy"

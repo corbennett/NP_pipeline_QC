@@ -342,28 +342,43 @@ def get_frame_offsets(sync_dataset, frame_counts, tolerance=0):
         epoch_start_frames.append(epoch_frames[0])
     print(epoch_frame_counts)
     print(frame_counts)
+    
+    start_frames = []
+    for ind, fc in enumerate(frame_counts):
         
-    if len(epoch_frame_counts)>len(frame_counts):
-        logging.warning('Found extra stim presentations. Inferring start frames')
+        start_ind = np.where(epoch_frame_counts == fc)[0]
+        if len(start_ind)==0:
+            print(f'Could not find start frame for stimulus {ind}')
+            start_frames.append(np.nan)
+            continue
         
-        start_frames = []
-        for stim_num, fc in enumerate(frame_counts):
-            
-            print('finding stim start for stim {}'.format(stim_num))
-            best_match = np.argmin([np.abs(e-fc) for e in epoch_frame_counts])
-            if fc*(1-tolerance) <= epoch_frame_counts[best_match] <= fc*(1+tolerance):
-                _ = epoch_frame_counts.pop(best_match)
-                start_frame = epoch_start_frames.pop(best_match)
-                start_frames.append(start_frame)
-                print('found stim start at vsync {}'.format(start_frame))
-                
-            else:
-                logging.error('Could not find matching sync frames for stim {}'.format(stim_num))
-                return
+        start_frames.append(epoch_start_frames[int(start_ind)])
+        
     
     
-    else:        
-        start_frames = epoch_start_frames
+    
+    
+#    if len(epoch_frame_counts)>len(frame_counts):
+#        logging.warning('Found extra stim presentations. Inferring start frames')
+#        
+#        start_frames = []
+#        for stim_num, fc in enumerate(frame_counts):
+#            
+#            print('finding stim start for stim {}'.format(stim_num))
+#            best_match = np.argmin([np.abs(e-fc) for e in epoch_frame_counts])
+#            if fc*(1-tolerance) <= epoch_frame_counts[best_match] <= fc*(1+tolerance):
+#                _ = epoch_frame_counts.pop(best_match)
+#                start_frame = epoch_start_frames.pop(best_match)
+#                start_frames.append(start_frame)
+#                print('found stim start at vsync {}'.format(start_frame))
+#                
+#            else:
+#                logging.error('Could not find matching sync frames for stim {}'.format(stim_num))
+#                return
+#    
+#    
+#    else:        
+#        start_frames = epoch_start_frames
     
     return start_frames
 

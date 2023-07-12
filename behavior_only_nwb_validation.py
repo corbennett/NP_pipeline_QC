@@ -16,6 +16,11 @@ save_dir = r"\\allen\programs\mindscope\workgroups\np-behavior\vbn_data_release\
 validation_dir = os.path.join(save_dir, 'validation_jsons')
 validation_files = os.listdir(validation_dir)
 
+behavior_validation_sessions = np.unique([f.split('_')[0] for f in validation_files if '_sessionIDMatch' not in f])
+missing_behavior_sessions = np.setdiff1d(beh_session_table.index.values, behavior_validation_sessions)
+
+session_id_match_files = [v for v in validation_files if '_sessionIDMatch' in v]
+
 def read_json(path):
     
     with open(path, 'r') as f:
@@ -23,10 +28,19 @@ def read_json(path):
     
     return j
 
+session_id_match = {}
+for vf in session_id_match_files:
+    vfpath = os.path.join(validation_dir, vf)
+    results = read_json(vfpath)
+    session_id_match[vf.split('_')[0]] = results['filename_file_sess_id_match']
+
+num_match =  np.sum([v for k,v in session_id_match.items()])
+assert(num_mismatch==len(beh_session_table))
 
 failures = []
 for vf in validation_files:
-    
+    if 'sessionIDMatch' in vf:
+        continue
     vfpath = os.path.join(validation_dir, vf)
     results = read_json(vfpath)
     
@@ -67,7 +81,7 @@ for f in failed_sessions:
     df = pd.concat([df, sdf])
 
 
-rw75 = df[df['response_window_end']==0.75]
+rw75 = df[df['response_window_end']==1]#0.75]
 
 
 

@@ -54,7 +54,25 @@ SPECIMEN_QRY = '''
     FROM specimens sp
     WHERE sp.external_specimen_name=cast({} as character varying)
     '''
+
+behavior_sessions_for_mouse_id_query = '''
+    SELECT *
+    FROM behavior_sessions bs
+    JOIN donors AS d
+    ON bs.donor_id = d.id
+    WHERE d.external_donor_name=cast({} as character varying)
+    '''
+
+
+lab_tracks_id_from_behavior_session_id = '''
+    SELECT external_donor_name 
+    FROM donors d
+    JOIN behavior_sessions as bs
+    ON d.id = bs.donor_id
+    WHERE bs.id = {}
+    '''
     
+
 #BEHAVIOR_SESSION_BY_DATEQRY = '''
 #    SELECT *
 #    FROM behavior_sessions bs
